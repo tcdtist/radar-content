@@ -1,0 +1,50 @@
+{
+  "name": "radar-content",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered Content Intelligence Dashboard — zero-cost, serverless, self-hosted.",
+  "keywords": [
+    "content-intelligence",
+    "cloudflare-workers",
+    "gemini-api",
+    "knowledge-graph",
+    "leiden-algorithm",
+    "tech-radar"
+  ],
+  "author": "tcdtist",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute radar-content-db --local --file=./src/lib/db/schema.sql",
+    "db:migrate:remote": "wrangler d1 execute radar-content-db --remote --file=./src/lib/db/schema.sql",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:e2e": "node scripts/e2e-web-test.mjs",
+    "test:web:x": "node scripts/verify-x-articles-web.mjs",
+    "demo:live": "node scripts/live-demo.mjs",
+    "crawl:x": "npx tsx scripts/x-crawler/run-x-crawler.ts",
+    "capture:cover": "node scripts/capture-cover.mjs"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "@types/node": "^22.20.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "puppeteer-core": "^25.11.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8",
+    "wrangler": "^3.100.0"
+  }
+}

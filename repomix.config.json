@@ -1,0 +1,36 @@
+{
+  "output": {
+    "filePath": "repomix-output.md",
+    "style": "markdown",
+    "removeComments": false,
+    "showLineNumbers": false,
+    "topFilesLength": 10
+  },
+  "include": [
+    "src/**",
+    "tests/**",
+    "docs/**",
+    "scripts/**",
+    "package.json",
+    "wrangler.toml",
+    "tsconfig.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
+  ],
+  "ignore": {
+    "customPatterns": [
+      "dist/**",
+      "node_modules/**",
+      "tmp/**",
+      "*.env*",
+      ".dev.vars*"
+    ]
+  },
+  "security": {
+    "enableSecurityCheck": true
+  }
+}

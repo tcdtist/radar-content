@@ -1,0 +1,387 @@
+name: Gemini PR Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'assets/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gemini-review:
+    name: AI Code Review (Gemini Flash)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze PR Diff with Gemini
+        id: review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: "gemini-3.8-flash"
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - << 'EOF'
+          import subprocess
+          import os
+          import sys
+          import json
+          import time
+          import urllib.request
+          import urllib.error
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import re
+
+          gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+          preferred_model = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.8-flash"
+          pr_number = os.environ.get("PR_NUMBER", "").strip()
+          base_ref = os.environ.get("BASE_REF", "").strip()
+          head_ref = os.environ.get("HEAD_REF", "").strip()
+          head_sha = os.environ.get("HEAD_SHA", "").strip() or "HEAD"
+          pr_title = os.environ.get("PR_TITLE", "").strip()
+          pr_body = os.environ.get("PR_BODY", "").strip()
+
+          if not gemini_api_key:
+              print("::warning::GEMINI_API_KEY secret is not configured. Skipping Gemini code review.")
+              sys.exit(0)
+
+          # Ensure base branch is fetched for accurate git diff
+          try:
+              res = subprocess.run(
+                  ["git", "fetch", "origin", base_ref],
+                  capture_output=True,
+                  text=True,
+                  check=False
+              )
+              if res.returncode != 0 and res.stderr:
+                  print(f"::warning::git fetch origin {base_ref} exited with code {res.returncode}: {res.stderr.strip()}")
+          except Exception as e:
+              print(f"::warning::Exception during git fetch: {e}")
+
+          EXCLUDE_FILENAMES = {
+              "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock"
+          }
+
+          EXCLUDE_DIRS = {
+              "dist", "build", "node_modules", ".wrangler", "tmp", ".system_generated"
+          }
+
+          EXCLUDE_EXTENSIONS = {
+              ".min.js", ".min.css", ".map", ".png", ".jpg", ".jpeg", ".gif",
+              ".svg", ".ico", ".webp", ".pdf", ".zip", ".tar.gz"
+          }
+
+          SENSITIVE_PREFIXES = (".env",)
+          SENSITIVE_EXTENSIONS = (".pem", ".key", ".crt", ".secret")
+
+          def should_exclude(filepath):
+              normalized = filepath.replace("\\", "/")
+              path_obj = Path(normalized)
+              filename = path_obj.name
+
+              if filename in EXCLUDE_FILENAMES:
+                  return True
+              if any(part in EXCLUDE_DIRS for part in path_obj.parts):
+                  return True
+              if "assets/screenshots" in normalized:
+                  return True
+              if any(filename.startswith(p) for p in SENSITIVE_PREFIXES) and not filename.endswith(".example"):
+                  return True
+              if any(filename.endswith(ext) for ext in SENSITIVE_EXTENSIONS):
+                  return True
+              for ext in EXCLUDE_EXTENSIONS:
+                  if filename.endswith(ext):
+                      return True
+              return False
+
+          target_base = f"origin/{base_ref}"
+          try:
+              res = subprocess.run(
+                  ["git", "diff", "--name-only", f"{target_base}...HEAD"],
+                  capture_output=True, text=True, check=True
+              )
+              changed_files = [f.strip() for f in res.stdout.splitlines() if f.strip()]
+          except Exception as err:
+              print(f"Error diffing against {target_base}: {err}")
+              res = subprocess.run(
+                  ["git", "diff", "--name-only", "HEAD~1...HEAD"],
+                  capture_output=True, text=True, check=False
+              )
+              changed_files = [f.strip() for f in res.stdout.splitlines() if f.strip()]
+
+          filtered_files = [f for f in changed_files if not should_exclude(f)]
+          print(f"Total changed files: {len(changed_files)}, Files subject to review: {len(filtered_files)}")
+
+          HEADER_MARKER = "<!-- gemini-pr-review -->"
+
+          if not filtered_files:
+              comment = (
+                  f"{HEADER_MARKER}\n\n"
+                  "## 🤖 Gemini PR Code Review\n\n"
+                  "### 📋 Tổng quan (Overview)\n"
+                  "Pull Request này chỉ bao gồm các thay đổi đối với file tự sinh (lockfile, screenshots, build artifacts). "
+                  "Không có mã nguồn logic nào cần phân tích.\n\n"
+                  "### 🎯 Kết luận (Verdict)\n"
+                  "- **COMMENT**: Không phát hiện rủi ro về mã nguồn.\n\n"
+                  f"---\n*Được đánh giá tự động bởi **Gemini Flash** | Mã commit: `{head_sha[:7]}`*"
+              )
+              with open("review_comment.md", "w", encoding="utf-8") as f:
+                  f.write(comment)
+              sys.exit(0)
+
+          diff_cmd = ["git", "diff", f"{target_base}...HEAD", "--"] + filtered_files
+          diff_res = subprocess.run(diff_cmd, capture_output=True, text=True, check=False)
+          diff_text = diff_res.stdout
+
+          MAX_DIFF_CHARS = 80000
+          if len(diff_text) > MAX_DIFF_CHARS:
+              diff_text = diff_text[:MAX_DIFF_CHARS] + "\n\n... [Diff đã được rút gọn do vượt quá 80,000 ký tự] ..."
+
+          system_prompt = (
+              "Bạn là Senior Full-Stack & Cloudflare Serverless Tech Lead, thực hiện code review nghiêm ngặt theo tiêu chuẩn production cho dự án Radar Content.\n"
+              "Kiến trúc dự án: Cloudflare Workers (TypeScript), Hono framework, Cloudflare D1 (SQLite), Cloudflare Queues, Gemini 2.0 Flash API, Leiden graph community detection, Vite + React 19 SPA.\n"
+              "Mục tiêu cốt lõi: Đảm bảo độ tin cậy kỹ thuật, phát hiện rủi ro tiềm ẩn, tuân thủ nguyên tắc KISS, DRY, YAGNI, và phản hồi bằng Tiếng Việt với tinh thần xây dựng, ngắn gọn, súc tích, đi thẳng vào vấn đề.\n\n"
+              "Phạm vi phân tích trọng tâm:\n"
+              "1. ☁️ Cloudflare Workers Edge Safety: Không dùng native Node.js binaries không hỗ trợ, tôn trọng giới hạn CPU time (<50ms free tier), quản lý kết nối I/O bất đồng bộ an toàn.\n"
+              "2. 🗄️ Database & SQL (Cloudflare D1): Prepared statements chống SQL injection, transaction bounds, schema migration an toàn, tránh N+1 queries.\n"
+              "3. 🧠 Graph & Leiden Clustering: Tránh bùng nổ tổ hợp cạnh O(N^2), đảm bảo giải thuật hội tụ, modularity CPM calculation.\n"
+              "4. 🎨 Frontend React & UI UX: Cập nhật lạc quan (optimistic UI), debounce tìm kiếm, xử lý fallback mock khi API offline, không gây layout shift.\n"
+              "5. 🔒 Bảo mật: Rò rỉ secret/API key/credentials, CORS header an toàn, input sanitization.\n"
+              "6. 📐 Coding Standards: TypeScript strict mode (không dùng any), modularity (< 200 dòng/tệp), kebab-case filenames.\n\n"
+              "Nguyên tắc phản hồi:\n"
+              "- Sử dụng Tiếng Việt hoàn toàn (thuật ngữ kỹ thuật giữ nguyên khi cần thiết).\n"
+              "- Trình bày rõ ràng, có căn cứ (dẫn chứng cụ thể tên file, dòng code hoặc hàm nếu có).\n"
+              "- Phân loại mức độ nghiêm trọng: [CRITICAL] (phải sửa trước khi merge), [WARNING] (khuyến nghị sửa), [SUGGESTION] (gợi ý cải tiến).\n"
+              "- Đưa ra code snippet minh họa ngắn gọn, thực tế nếu có đề xuất tối ưu.\n\n"
+              "Cấu trúc bản nhận xét Review bắt buộc tuân theo định dạng markdown sau:\n"
+              "## 🤖 Gemini PR Code Review\n"
+              "### 📋 Tổng quan (Overview)\n"
+              "- Tóm tắt ngắn gọn thay đổi và đánh giá sơ bộ độ an toàn.\n\n"
+              "### 🔍 Đánh giá chi tiết (Detailed Findings)\n"
+              "- Các vấn đề phát hiện (nếu có) theo từng mức độ [CRITICAL], [WARNING], [SUGGESTION] kèm phân tích nguyên nhân và cách khắc phục. Nếu không có vấn đề lớn, ghi nhận ngắn gọn.\n\n"
+              "### 💡 Đề xuất tối ưu (Optimizations & Code Snippets)\n"
+              "- Đề xuất cải tiến cụ thể kèm snippet ngắn minh họa.\n\n"
+              "### 🎯 Kết luận (Verdict)\n"
+              "- Đưa ra khuyến nghị rõ ràng: `APPROVE`, `COMMENT`, hoặc `REQUEST CHANGES`."
+          )
+
+          user_prompt = (
+              f"Pull Request #{pr_number}: {pr_title}\n"
+              f"Branch: {head_ref} -> {base_ref}\n"
+              f"Mô tả PR:\n{pr_body or 'Không có mô tả chi tiết.'}\n\n"
+              f"Danh sách file thay đổi ({len(filtered_files)} files):\n"
+              + "\n".join(f"- {f}" for f in filtered_files) + "\n\n"
+              f"Git Diff:\n```diff\n{diff_text}\n```"
+          )
+
+          payload = {
+              "systemInstruction": {
+                  "parts": [{"text": system_prompt}]
+              },
+              "contents": [
+                  {
+                      "role": "user",
+                      "parts": [{"text": user_prompt}]
+                  }
+              ],
+              "generationConfig": {
+                  "temperature": 0.1,
+                  "topP": 0.95,
+                  "topK": 40,
+                  "maxOutputTokens": 8192
+              },
+              "safetySettings": [
+                  {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                  {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                  {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                  {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+              ]
+          }
+
+          # Blacklist non-text / non-code models to avoid wasting quota & timeouts
+          BLACKLIST_KEYWORDS = (
+              "tts", "preview-tts", "image", "banana", "transcribe", "clip",
+              "audio", "robotics", "computer-use", "dialog", "live", "embedding"
+          )
+
+          # Prioritized Top-Down Quality Cascade:
+          # S-Tier (Flagship 20 RPD) -> A-Tier (Mature 20 RPD) -> B-Tier (High-Throughput 500 RPD)
+          TIERED_PRIORITY = [
+              "gemini-3.8-flash",
+              "gemini-3.7-flash",
+              "gemini-3.6-flash",
+              "gemini-3.5-flash",
+              "gemini-3-flash-preview",
+              "gemini-flash-latest",
+              "gemini-3.5-flash-lite",
+              "gemini-3.1-flash-lite",
+              "gemini-flash-lite-latest",
+          ]
+
+          discovered_models = []
+          try:
+              list_req = urllib.request.Request(
+                  "https://generativelanguage.googleapis.com/v1beta/models",
+                  headers={"x-goog-api-key": gemini_api_key}
+              )
+              with urllib.request.urlopen(list_req, timeout=20) as resp:
+                  list_data = json.loads(resp.read().decode("utf-8"))
+                  for m in list_data.get("models", []):
+                      name = m.get("name", "").replace("models/", "")
+                      methods = m.get("supportedGenerationMethods", [])
+                      if "generateContent" in methods and "flash" in name.lower():
+                          if not any(bk in name.lower() for bk in BLACKLIST_KEYWORDS):
+                              discovered_models.append(name)
+              print(f"Discovered clean flash models from API: {discovered_models}")
+          except Exception as e:
+              print(f"Model discovery query note: {e}")
+
+          # Preserve Top-Down hierarchy: preferred -> TIERED_PRIORITY -> any newly discovered models
+          initial_candidates = [preferred_model] + TIERED_PRIORITY + discovered_models
+          models_to_try = []
+          for m in initial_candidates:
+              if m and m not in models_to_try:
+                  if not any(bk in m.lower() for bk in BLACKLIST_KEYWORDS):
+                      models_to_try.append(m)
+
+          print(f"Final prioritized model cascade ({len(models_to_try)} tiers): {models_to_try}")
+
+          success = False
+          review_content = ""
+          active_model_name = preferred_model
+
+          for model in models_to_try:
+              api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+              max_attempts_per_model = 2
+              should_rotate = False
+
+              for attempt in range(1, max_attempts_per_model + 1):
+                  req = urllib.request.Request(
+                      api_url,
+                      data=json.dumps(payload).encode("utf-8"),
+                      headers={
+                          "Content-Type": "application/json",
+                          "x-goog-api-key": gemini_api_key
+                      },
+                      method="POST"
+                  )
+
+                  print(f"Calling Gemini API with model '{model}' (attempt {attempt}/{max_attempts_per_model}) for PR #{pr_number}...")
+                  try:
+                      with urllib.request.urlopen(req, timeout=90) as resp:
+                          res_data = json.loads(resp.read().decode("utf-8"))
+                      candidates = res_data.get("candidates", [])
+                      if not candidates:
+                          print(f"Warning: No candidates returned from model '{model}'. Rotating...")
+                          should_rotate = True
+                          break
+                      parts = candidates[0].get("content", {}).get("parts", [])
+                      review_parts = [p.get("text", "") for p in parts if not p.get("thought", False)]
+                      if not review_parts:
+                          review_parts = [p.get("text", "") for p in parts]
+                      review_content = "".join(review_parts).strip()
+                      header_match = re.search(r"^#{1,3}\s*🤖?\s*Gemini PR Code Review", review_content, flags=re.MULTILINE)
+                      if header_match:
+                          review_content = review_content[header_match.start():]
+                      elif "Gemini PR Code Review" in review_content:
+                          review_content = review_content[review_content.find("Gemini PR Code Review"):]
+                      if review_content:
+                          active_model_name = model
+                          success = True
+                          print(f"Successfully generated review with model '{model}'.")
+                          break
+                  except urllib.error.HTTPError as e:
+                      err_body = e.read().decode("utf-8", errors="replace")
+                      print(f"Model '{model}' HTTP {e.code}: {err_body[:200]}")
+                      if e.code == 404:
+                          print(f"Model '{model}' is unavailable/deprecated (HTTP 404). Rotating immediately...")
+                          should_rotate = True
+                          break
+                      elif e.code == 429:
+                          if attempt < max_attempts_per_model:
+                              print(f"Model '{model}' hit 429 (burst limit). Waiting 2s before retry...")
+                              time.sleep(2)
+                              continue
+                          else:
+                              print(f"Model '{model}' daily quota exhausted (HTTP 429 RPD). Rotating to next tier immediately...")
+                              should_rotate = True
+                              break
+                      elif e.code in (500, 502, 503, 504):
+                          if attempt < max_attempts_per_model:
+                              print(f"Transient server error {e.code}. Waiting 3s before retry...")
+                              time.sleep(3)
+                              continue
+                          else:
+                              should_rotate = True
+                              break
+                      else:
+                          should_rotate = True
+                          break
+                  except Exception as e:
+                      print(f"Unexpected error with model '{model}': {e}. Rotating to next model...")
+                      should_rotate = True
+                      break
+
+              if success:
+                  break
+
+          if not success or not review_content:
+              print("::error::Could not generate review using any candidate model.")
+              sys.exit(1)
+
+          footer = (
+              f"\n\n---\n"
+              f"*Được đánh giá tự động bởi **{active_model_name}** | "
+              f"Mã commit: `{head_sha[:7]}` | "
+              f"Thời gian: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+          )
+          full_comment = f"{HEADER_MARKER}\n\n{review_content}{footer}"
+
+          with open("review_comment.md", "w", encoding="utf-8") as f:
+              f.write(full_comment)
+          print("Review comment written to file successfully.")
+          EOF
+
+      - name: Post or Update PR Comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ ! -f review_comment.md ]; then
+            echo "No review comment found to publish."
+            exit 0
+          fi
+
+          HEADER_MARKER="<!-- gemini-pr-review -->"
+
+          COMMENT_ID=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq ".[] | select(.body | contains(\"${HEADER_MARKER}\")) | .id" | head -n 1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            echo "Updating existing review comment in-place (ID: ${COMMENT_ID})..."
+            gh api "repos/${REPO}/issues/comments/${COMMENT_ID}" -X PATCH -F body=@review_comment.md
+          else
+            echo "Creating new review comment on PR #${PR_NUMBER}..."
+            gh pr comment "$PR_NUMBER" --body-file review_comment.md
+          fi

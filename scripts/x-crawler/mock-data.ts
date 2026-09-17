@@ -1,0 +1,101 @@
+import { XComment, XTweet, XUser } from './types';
+
+export const MOCK_SEED_USERS: XUser[] = [
+  {
+    id: 'user_goon_nguyen',
+    screenName: 'goon_nguyen',
+    name: 'Duy Nguyen',
+    description: 'Building @AgentKit and ClaudeKit. 18+ yrs systems architect. AI coding agents & LLM engineering.',
+    followersCount: 15400,
+    followingCount: 320,
+    statusesCount: 3200,
+  },
+  {
+    id: 'user_swyx',
+    screenName: 'swyx',
+    name: 'swyx',
+    description: 'AI Engineer Foundation, Smarter Parts, Latent Space. Ex-Temporal, AWS, Netlify. LLMs, agents, evals.',
+    followersCount: 120000,
+    followingCount: 1200,
+    statusesCount: 28000,
+  },
+  {
+    id: 'user_karpathy',
+    screenName: 'karpathy',
+    name: 'Andrej Karpathy',
+    description: 'Building Eureka Labs (AI+Education). ex-OpenAI, ex-Tesla. Neural networks, LLMs.',
+    followersCount: 1100000,
+    followingCount: 450,
+    statusesCount: 6500,
+  },
+  {
+    id: 'user_altryne',
+    screenName: 'altryne',
+    name: 'Alex Volkov',
+    description: 'AI Researcher & podcast host @ThursdaAI. Building agentic workflows and local LLM pipelines.',
+    followersCount: 45000,
+    followingCount: 980,
+    statusesCount: 12000,
+  },
+];
+
+export const MOCK_TWEETS_WITH_COMMENTS: Array<{ tweet: XTweet; comments: XComment[] }> = [
+  {
+    tweet: {
+      id: 'tweet_1001',
+      author: 'goon_nguyen',
+      authorName: 'Duy Nguyen',
+      text: 'Multi-agent systems will replace 80% of brittle monolithic prompt engineering by 2027. Instead of cramming 50 instructions into 1 LLM prompt, isolated role-based subagents with bounded toolkits reduce hallucinations by over 70% in empirical benchmarks.',
+      createdAt: Math.floor(Date.now() / 1000) - 3600 * 4,
+      replyCount: 12,
+      retweetCount: 34,
+      likeCount: 215,
+      url: 'https://x.com/goon_nguyen/status/tweet_1001',
+      isRetweet: false,
+      isReply: false,
+    },
+    comments: [
+      {
+        id: 'reply_1001_1',
+        author: 'swyx',
+        authorName: 'swyx',
+        text: 'The counter-tradeoff is orchestration overhead and latency. When subagents start round-tripping across 4-5 turns, time-to-first-token drops and token costs 5x unless using tight local models.',
+        likeCount: 89,
+        createdAt: Math.floor(Date.now() / 1000) - 3600 * 3,
+      },
+      {
+        id: 'reply_1001_2',
+        author: 'altryne',
+        authorName: 'Alex Volkov',
+        text: 'Agree on role isolation, but you need strict arbitration. Without an independent reviewer agent, error propagation cascades between subagents very quickly.',
+        likeCount: 45,
+        createdAt: Math.floor(Date.now() / 1000) - 3600 * 2,
+      },
+    ],
+  },
+  {
+    tweet: {
+      id: 'tweet_1002',
+      author: 'swyx',
+      authorName: 'swyx',
+      text: 'Why serverless edge SQLite (Cloudflare D1 / Turso) is becoming the default for agentic memory: microsecond cold starts, zero-idle cost, and instant branchability per agent thread.',
+      createdAt: Math.floor(Date.now() / 1000) - 3600 * 12,
+      replyCount: 8,
+      retweetCount: 19,
+      likeCount: 178,
+      url: 'https://x.com/swyx/status/tweet_1002',
+      isRetweet: false,
+      isReply: false,
+    },
+    comments: [
+      {
+        id: 'reply_1002_1',
+        author: 'sqlite_guru',
+        authorName: 'DataArchitect',
+        text: 'True for read-heavy workloads, but single-writer SQLite locks still bite when 100 concurrent agents try to log co-occurrence edges simultaneously.',
+        likeCount: 31,
+        createdAt: Math.floor(Date.now() / 1000) - 3600 * 10,
+      },
+    ],
+  },
+];

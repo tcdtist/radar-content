@@ -1,0 +1,6 @@
+# Cloudflare Pages Redirects
+# To proxy API calls to your Cloudflare Worker, uncomment and update the URL below:
+# /api/* https://<your-worker-name>.<your-subdomain>.workers.dev/api/:splat 200
+
+# SPA fallback
+/* /index.html 200

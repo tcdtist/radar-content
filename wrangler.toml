@@ -1,0 +1,39 @@
+name = "radar-content"
+main = "src/workers/api.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron triggers: evaluated at 00:01, 06:01, 12:01, 18:01 Vietnam Time (UTC: 17:01, 23:01, 05:01, 11:01)
+# The Worker's ScheduleManager gates execution based on CRAWL_FREQUENCY (1-4x per day)
+[triggers]
+crons = ["1 5,11,17,23 * * *"]
+
+# D1 Database binding
+# Run: `wrangler d1 create radar-content-db` and update database_id below
+[[d1_databases]]
+binding = "DB"
+database_name = "radar-content-db"
+database_id = "your-database-id-here"
+
+# Queue producer binding
+[[queues.producers]]
+queue = "radar-content-articles"
+binding = "ARTICLE_QUEUE"
+
+# Queue consumer
+[[queues.consumers]]
+queue = "radar-content-articles"
+max_batch_size = 5
+max_batch_timeout = 30
+
+# KV for caching
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "placeholder"
+
+[vars]
+GEMINI_MODEL = "gemini-3.6-flash"
+CRAWL_SOURCES = "rss,hn,lobsters,reddit"
+CRAWL_FREQUENCY = "1"
+TIMEZONE = "Asia/Ho_Chi_Minh"
+

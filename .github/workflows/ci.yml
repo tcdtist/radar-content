@@ -1,0 +1,167 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Typecheck & Code Standards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript Typecheck
+        run: npm run typecheck
+
+      - name: Audit File Length (< 200 lines rule)
+        run: |
+          echo "Auditing source file modularity (must be < 200 lines per file)..."
+          violations=0
+          while IFS= read -r file; do
+            count=$(wc -l < "$file" | tr -d ' ')
+            if [ "$count" -ge 200 ]; then
+              echo "::error file=$file::File exceeds 200 lines: $count lines"
+              violations=$((violations + 1))
+            fi
+          done < <(find src -name "*.ts" -o -name "*.tsx")
+          if [ "$violations" -gt 0 ]; then
+            echo "Total files violating modularity boundary: $violations"
+            exit 1
+          fi
+          echo "All source files strictly adhere to < 200 lines modularity rule."
+
+      - name: Security & Secretlint Audit
+        run: |
+          npx --yes @secretlint/quick-start "src/**/*.{ts,tsx}" "scripts/**/*.mjs"
+          npx --yes repomix --no-files --output /tmp/repomix-security-check.xml
+
+  test:
+    name: Unit & Integration Tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest Suite (7 test suites)
+        run: npm test
+
+  build:
+    name: Vite SPA Build & Bundle Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SPA Bundle
+        run: npm run build
+
+      - name: Verify Distribution Artifacts
+        run: |
+          test -f dist/index.html || { echo "dist/index.html missing"; exit 1; }
+          html_size=$(wc -c < dist/index.html | tr -d ' ')
+          echo "Vite build successful. HTML size: ${html_size} bytes."
+
+      - name: Cache SPA Distribution Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vite-dist
+          path: dist/
+          retention-days: 1
+
+  e2e:
+    name: E2E Interactive Browser Testing (Chrome)
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download Cached SPA Build
+        uses: actions/download-artifact@v4
+        with:
+          name: vite-dist
+          path: dist
+
+      - name: Start Vite Preview Server
+        run: |
+          npm run preview -- --port 3000 &
+          echo "Waiting for Vite preview server to be ready on port 3000..."
+          for i in {1..30}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -q "200"; then
+              echo "Vite preview server is ready!"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run Chrome E2E Suite
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          TARGET_URL: http://localhost:3000
+        run: |
+          mkdir -p assets/screenshots
+          npm run test:e2e
+
+      - name: Upload Test Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: assets/screenshots/
+          retention-days: 7
