@@ -1,6 +1,7 @@
 import React from 'react';
 import { CardTranslation, ScoredIntelligenceCard } from '../../lib/db/types';
 import { formatDateTime, formatRelativeTime } from '../utils/date-format';
+import { getTierBadge } from '../utils/tier-badge';
 import { ClockIcon, ExternalLinkIcon } from './Icons';
 
 export type TabKey = 'summary' | 'evidence' | 'counter' | 'context' | 'verify' | 'sources';
@@ -12,13 +13,14 @@ interface DetailTabsContentProps {
 }
 
 export const DetailTabsContent: React.FC<DetailTabsContentProps> = ({ card, activeTab, translation }) => {
+  const pad = (t?: string[], orig: string[] = []) =>
+    t && t.length ? (t.length >= orig.length ? t : [...t, ...orig.slice(t.length)]) : orig;
+
   const summary = translation?.summary || card.summary;
-  const evidence = translation?.evidence?.length ? translation.evidence : card.evidence;
-  const counter = translation?.counter?.length ? translation.counter : card.counter;
-  const context = translation?.context?.length ? translation.context : card.context;
-  const verificationQuestions = translation?.verification_questions?.length
-    ? translation.verification_questions
-    : card.verification_questions;
+  const evidence = pad(translation?.evidence, card.evidence);
+  const counter = pad(translation?.counter, card.counter);
+  const context = pad(translation?.context, card.context);
+  const verificationQuestions = pad(translation?.verification_questions, card.verification_questions);
 
   if (activeTab === 'summary') {
     return (
@@ -104,6 +106,9 @@ export const DetailTabsContent: React.FC<DetailTabsContentProps> = ({ card, acti
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                 <span className="badge font-mono" style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: 'var(--bg-tertiary)' }}>
                   {s.source.toUpperCase()}
+                </span>
+                <span className={`badge ${getTierBadge(s.source, s.url).className}`} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem' }}>
+                  {getTierBadge(s.source, s.url).emoji} {getTierBadge(s.source, s.url).label}
                 </span>
                 {s.author && (
                   <span className="font-mono text-coral" style={{ fontSize: '0.78rem', fontWeight: 600 }}>

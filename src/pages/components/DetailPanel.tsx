@@ -81,16 +81,16 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
 
   if (!card) return null;
 
+  const padItems = (translated?: string[], original: string[] = []): string[] => {
+    if (!translated || translated.length === 0) return original;
+    if (translated.length >= original.length) return translated;
+    return [...translated, ...original.slice(translated.length)];
+  };
+
   const displaySummary = activeTranslation?.summary || card.summary;
-  const displayEvidence = activeTranslation?.evidence?.length
-    ? activeTranslation.evidence
-    : card.evidence;
-  const displayCounter = activeTranslation?.counter?.length
-    ? activeTranslation.counter
-    : card.counter;
-  const displayVerify = activeTranslation?.verification_questions?.length
-    ? activeTranslation.verification_questions
-    : card.verification_questions;
+  const displayEvidence = padItems(activeTranslation?.evidence, card.evidence);
+  const displayCounter = padItems(activeTranslation?.counter, card.counter);
+  const displayVerify = padItems(activeTranslation?.verification_questions, card.verification_questions);
 
   const copyMarkdown = () => {
     const md = generateCardMarkdown(card, {

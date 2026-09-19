@@ -1,15 +1,8 @@
 import React from 'react';
 import { CalendarIcon, SearchIcon } from './Icons';
+import { STATUS_OPTIONS, TIER_FILTER_OPTIONS, TOPICS } from './filter-bar-config';
 
-export const TOPICS = ['all', 'AI', 'System Design', 'Backend', 'Frontend', 'Cloud/DevOps', 'Database', 'Security'];
-
-export const STATUS_OPTIONS = [
-  { label: 'Active Signals', value: 'READY,LEAD' },
-  { label: 'Ready for Draft', value: 'READY' },
-  { label: 'Saved', value: 'SAVED' },
-  { label: 'Written', value: 'WRITTEN' },
-  { label: 'Dismissed', value: 'DISMISSED' },
-];
+export { TOPICS, STATUS_OPTIONS, TIER_FILTER_OPTIONS };
 
 interface FilterBarProps {
   activeTopic: string;
@@ -20,6 +13,8 @@ interface FilterBarProps {
   onSelectSort: (sort: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  activeTierFilter?: string;
+  onTierFilterChange?: (tier: string) => void;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -31,6 +26,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onSelectSort,
   searchQuery,
   onSearchChange,
+  activeTierFilter = 'all',
+  onTierFilterChange,
 }) => {
   return (
     <div className="base-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.75rem' }}>
@@ -152,6 +149,31 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               </button>
             );
           })}
+          {onTierFilterChange && (
+            <>
+              <span className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0 0.25rem' }}>|</span>
+              <select
+                id="select-tier-filter"
+                data-testid="select-tier-filter" aria-label="Filter by source tier"
+                className="font-mono"
+                value={activeTierFilter} onChange={(e) => onTierFilterChange(e.target.value)}
+                style={{
+                  backgroundColor: activeTierFilter !== 'all' ? 'rgba(218, 119, 86, 0.12)' : 'var(--bg-primary)',
+                  border: `1px solid ${activeTierFilter !== 'all' ? 'var(--accent-coral)' : 'var(--bg-tertiary)'}`,
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.2rem 0.5rem',
+                  color: activeTierFilter !== 'all' ? 'var(--accent-coral)' : 'var(--text-muted)',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {TIER_FILTER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

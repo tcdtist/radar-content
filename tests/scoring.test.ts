@@ -69,4 +69,76 @@ describe('ScoringEngine', () => {
     expect(engine.determineStatus(leadInput, 'WRITTEN')).toBe('WRITTEN');
     expect(engine.determineStatus(leadInput, 'DISMISSED')).toBe('DISMISSED');
   });
+
+  it('scores higher with T1 authority sources than T3-only sources', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const t1Input = {
+      sources: ['x', 'hn'] as SourceType[],
+      sourceWeights: [1.0, 0.75], // T1 + T2
+      evidenceCount: 3,
+      claimCount: 2,
+      totalEngagement: 200,
+      publishedAtTimestamps: [now - 3600],
+    };
+
+    const t3Input = {
+      sources: ['reddit', 'rss'] as SourceType[],
+      sourceWeights: [0.4, 0.4], // T3 + T3
+      evidenceCount: 3,
+      claimCount: 2,
+      totalEngagement: 200,
+      publishedAtTimestamps: [now - 3600],
+    };
+
+    const t1Score = engine.computeScore(t1Input);
+    const t3Score = engine.computeScore(t3Input);
+
+    expect(t1Score.sourceAuthority).toBeGreaterThan(t3Score.sourceAuthority);
+    expect(t1Score.finalScore).toBeGreaterThan(t3Score.finalScore);
+  });
+
+  it('auto-promotes to READY with authority source + evidence', () => {
+    const input = {
+      sources: ['x'] as SourceType[],
+      sourceWeights: [1.0], // T1 authority
+      evidenceCount: 2,
+      claimCount: 2,
+      totalEngagement: 50,
+      publishedAtTimestamps: [],
+    };
+
+    // Single source but T1 authority + evidence → READY
+    expect(engine.determineStatus(input, 'LEAD')).toBe('READY');
+  });
+
+  it('backward compatible when sourceWeights is undefined', () => {
+    const input = {
+      sources: ['hn', 'reddit'] as SourceType[],
+      evidenceCount: 3,
+      claimCount: 2,
+      totalEngagement: 200,
+      publishedAtTimestamps: [Math.floor(Date.now() / 1000)],
+    };
+
+    const score = engine.computeScore(input);
+    expect(score.finalScore).toBeGreaterThanOrEqual(0);
+    expect(score.finalScore).toBeLessThanOrEqual(100);
+    expect(score.sourceAuthority).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns sourceAuthority in ScoreComponents', () => {
+    const input = {
+      sources: ['x'] as SourceType[],
+      sourceWeights: [1.0],
+      evidenceCount: 2,
+      claimCount: 2,
+      totalEngagement: 100,
+      publishedAtTimestamps: [Math.floor(Date.now() / 1000)],
+    };
+
+    const score = engine.computeScore(input);
+    expect(score).toHaveProperty('sourceAuthority');
+    expect(score.sourceAuthority).toBe(1.0);
+  });
 });
+

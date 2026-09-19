@@ -6,6 +6,7 @@ Strict Rules for Translation:
 2. Names & Products: Keep technology names, model versions, companies, and repository names unchanged (e.g., 'vLLM', 'DeepSeek', 'Claude 3.7', 'OpenAI', 'PyTorch', 'Cloudflare D1').
 3. Measurements & Numbers: Keep all numbers, units, benchmarks, and mathematical expressions exact (e.g., '100 GW', '3.5x', '150 tokens/s', '< 12ms').
 4. Tone & Style: Punchy, objective, investigative engineer style. Translate the reasoning, evidence points, and skeptical counterarguments into natural, flowing Vietnamese without fluff.
+5. 1-to-1 Item Completeness: You MUST translate every item in the input lists 1-to-1. Do NOT omit, combine, or drop any bullet point. Output arrays must match the exact number of input items.
 
 Output strictly valid JSON matching this schema:
 {
@@ -26,28 +27,28 @@ export interface CardToTranslate {
 }
 
 export function buildTranslationUserPrompt(card: CardToTranslate): string {
-  // Cap oversized merged cards to top salient items to avoid latency spikes
-  const evidence = (card.evidence || []).slice(0, 10);
-  const counter = (card.counter || []).slice(0, 8);
-  const context = (card.context || []).slice(0, 6);
-  const questions = (card.verification_questions || []).slice(0, 6);
+  const evidence = card.evidence || [];
+  const counter = card.counter || [];
+  const context = card.context || [];
+  const questions = card.verification_questions || [];
 
   return `Title/Topic: ${card.label}
 
 Summary:
 ${card.summary}
 
-Evidence Points:
+Evidence Points (${evidence.length} items - translate each 1-to-1):
 ${evidence.map((e, i) => `${i + 1}. ${e}`).join('\n')}
 
-Counterarguments & Skepticism:
+Counterarguments & Skepticism (${counter.length} items - translate each 1-to-1):
 ${counter.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
-Context:
+Context (${context.length} items - translate each 1-to-1):
 ${context.map((ctx, i) => `${i + 1}. ${ctx}`).join('\n')}
 
-Verification Questions:
+Verification Questions (${questions.length} items - translate each 1-to-1):
 ${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
-Translate all sections into authoritative Vietnamese following the strict technical rules. Return JSON.`;
+Translate all sections into authoritative Vietnamese following strict technical rules.
+Maintain exact 1-to-1 item count: evidence (${evidence.length} items), counter (${counter.length} items), context (${context.length} items), verification_questions (${questions.length} items). Return JSON.`;
 }

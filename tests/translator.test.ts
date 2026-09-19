@@ -30,6 +30,23 @@ describe('Card Translation Engine', () => {
     expect(SYSTEM_TRANSLATION_PROMPT).toContain('PRESERVE software engineering terms');
   });
 
+  it('preserves all evidence and counter points without truncation on large cards', () => {
+    const largeCard = {
+      label: 'Google Gemini 3.8',
+      summary: 'Large cluster summary',
+      evidence: Array.from({ length: 22 }, (_, i) => `Evidence item ${i + 1}`),
+      counter: Array.from({ length: 20 }, (_, i) => `Counter item ${i + 1}`),
+      context: Array.from({ length: 15 }, (_, i) => `Context item ${i + 1}`),
+      verification_questions: Array.from({ length: 24 }, (_, i) => `Question item ${i + 1}`),
+    };
+
+    const prompt = buildTranslationUserPrompt(largeCard);
+    expect(prompt).toContain('Evidence item 22');
+    expect(prompt).toContain('Counter item 20');
+    expect(prompt).toContain('Context item 15');
+    expect(prompt).toContain('Question item 24');
+  });
+
   it('parses valid JSON translation accurately', () => {
     const translator = new CardTranslator({} as GeminiClient);
     const mockJson = JSON.stringify({

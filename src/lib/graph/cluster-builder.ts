@@ -1,6 +1,7 @@
 import { linkClusterArticle, upsertCluster } from '../db/cluster-queries';
 import { CardStatus, makeArticleId, makeClusterId, SourceType } from '../db/types';
 import { ScoringEngine } from '../scoring/scoring-engine';
+import { getAuthorityWeight } from '../scoring/source-tiers';
 import { fetchGraph } from './graph-queries';
 import { LeidenAlgorithm } from './leiden-algorithm';
 
@@ -57,7 +58,7 @@ export class ClusterBuilder {
       // Query articles linked to these entityIds
       const placeholders = entityIds.map(() => '?').join(',');
       const articleRows = await db.prepare(`
-        SELECT DISTINCT a.id, a.source, a.published_at, e.evidence
+        SELECT DISTINCT a.id, a.source, a.url, a.published_at, e.evidence
         FROM article_entities ae
         JOIN articles a ON ae.article_id = a.id
         LEFT JOIN extractions e ON a.id = e.article_id
@@ -66,6 +67,7 @@ export class ClusterBuilder {
       `).bind(...entityIds).all<{
         id: string;
         source: SourceType;
+        url: string;
         published_at: number | null;
         evidence: string | null;
       }>();
@@ -77,7 +79,7 @@ export class ClusterBuilder {
         const likes = topEntities.map(() => 'a.title LIKE ?').join(' OR ');
         const params = topEntities.map((name) => `%${name}%`);
         const fallbackRows = await db.prepare(`
-          SELECT DISTINCT a.id, a.source, a.published_at, e.evidence
+          SELECT DISTINCT a.id, a.source, a.url, a.published_at, e.evidence
           FROM articles a
           LEFT JOIN extractions e ON a.id = e.article_id
           WHERE ${likes}
@@ -85,6 +87,7 @@ export class ClusterBuilder {
         `).bind(...params).all<{
           id: string;
           source: SourceType;
+          url: string;
           published_at: number | null;
           evidence: string | null;
         }>();
@@ -110,6 +113,7 @@ export class ClusterBuilder {
 
       const scoreInput = {
         sources,
+        sourceWeights: articles.map((a) => getAuthorityWeight(a.source, a.url)),
         evidenceCount: Math.max(1, evidenceCount),
         claimCount: Math.max(1, articles.length * 2),
         totalEngagement: articles.length * 120,

@@ -38,7 +38,21 @@ export function parseCrawlerArgs(argv = process.argv.slice(2)): CrawlerOptions {
   loadEnvFile(path.resolve(process.cwd(), '.env'));
 
   const envSeeds = process.env.SEED_USERS || process.env.X_SEED_USERS || process.env.SEED_USER;
-  const initialSeeds = envSeeds ? parseSeedUsers(envSeeds) : ['goon_nguyen'];
+  const initialSeeds = envSeeds
+    ? parseSeedUsers(envSeeds)
+    : [
+        'goon_nguyen',
+        'karpathy',
+        'swyx',
+        'simonw',
+        'tdinh_me',
+        'altryne',
+        '_can1357',
+        '_mohansolo',
+        'alexalbert__',
+        'jarredsumner',
+        'rauchg',
+      ];
 
   const options: CrawlerOptions = {
     seedUsers: initialSeeds,

@@ -13,8 +13,12 @@ GEMINI_API_KEY=your_gemini_api_key_here
 # Reddit custom subreddits (comma-separated, optional override)
 # REDDIT_SUBREDDITS=LocalLLaMA,ollama,MachineLearning,programming
 
-# X/Twitter Seed Accounts (comma-separated accounts to crawl and discover network)
-# SEED_USERS=goon_nguyen,tdinh_me,karpathy,swyx
+# X/Twitter Curated Seed Accounts — High-signal builders & AI Lab leaders
+# Inner Circle: goon_nguyen (AI Agents), karpathy (Neural Nets), swyx (AI Engineer),
+# simonw (LLM Security), tdinh_me (Indie Builder), altryne (ThursdayAI),
+# _can1357 (Reverse Eng), _mohansolo (Codeium CEO), alexalbert__ (Anthropic DevRel),
+# jarredsumner (Bun Creator), rauchg (Vercel CEO)
+SEED_USERS=goon_nguyen,karpathy,swyx,simonw,tdinh_me,altryne,_can1357,_mohansolo,alexalbert__,jarredsumner,rauchg
 
 # Crawl interval in minutes (default: 15)
 # CRAWL_INTERVAL_MINUTES=15

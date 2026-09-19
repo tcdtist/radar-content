@@ -185,6 +185,11 @@ body {
 .badge-written { background: rgba(88, 166, 201, 0.12); color: #58a6c9; border: 1px solid rgba(88, 166, 201, 0.35); }
 .badge-dismissed { background: rgba(128, 122, 112, 0.12); color: var(--text-muted); border: 1px solid rgba(128, 122, 112, 0.25); }
 
+/* Source Tier Badges */
+.badge-tier-1 { background: rgba(218, 119, 86, 0.15); color: var(--accent-coral); border: 1px solid rgba(218, 119, 86, 0.4); font-weight: 700; }
+.badge-tier-2 { background: rgba(88, 166, 201, 0.12); color: #58a6c9; border: 1px solid rgba(88, 166, 201, 0.35); }
+.badge-tier-3 { background: rgba(128, 122, 112, 0.08); color: var(--text-muted); border: 1px solid rgba(128, 122, 112, 0.2); }
+
 /* Drawer styles moved to drawer.css */
 
 

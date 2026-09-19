@@ -22,10 +22,16 @@ export function useCardTranslation(cardId: string | undefined) {
       return;
     }
 
-    // Cache hit in client memory
+    // Cache hit in client memory (bypass if cached translation is truncated)
     if (translations[card.id]) {
-      setCurrentLang('vi');
-      return;
+      const memCached = translations[card.id];
+      const isMemTruncated =
+        (card.evidence?.length && memCached.evidence && card.evidence.length > memCached.evidence.length) ||
+        (card.counter?.length && memCached.counter && card.counter.length > memCached.counter.length);
+      if (!isMemTruncated) {
+        setCurrentLang('vi');
+        return;
+      }
     }
 
     if (isTranslating) return;

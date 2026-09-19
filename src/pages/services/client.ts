@@ -155,10 +155,12 @@ export async function triggerProcess(): Promise<boolean> {
 
 export async function translateCard(
   id: string,
-  card?: Partial<ScoredIntelligenceCard>
+  card?: Partial<ScoredIntelligenceCard>,
+  force = false
 ): Promise<CardTranslation | null> {
   try {
-    const res = await fetch(`${API_BASE}/cards/${encodeURIComponent(id)}/translate`, {
+    const url = `${API_BASE}/cards/${encodeURIComponent(id)}/translate${force ? '?force=true' : ''}`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ card }),

@@ -1,29 +1,6 @@
 import { RawSourcePost, SourceCrawler } from './source-types';
 import { fetchArticleContent } from './content-reader';
-
-export interface RssFeedConfig {
-  name: string;
-  url: string;
-  defaultTopic?: string;
-}
-
-export const CURATED_TECH_FEEDS: RssFeedConfig[] = [
-  {
-    name: 'Hugging Face Blog',
-    url: 'https://huggingface.co/blog/feed.xml',
-    defaultTopic: 'AI',
-  },
-  {
-    name: 'Simon Willison AI Weblog',
-    url: 'https://simonwillison.net/atom/everything/',
-    defaultTopic: 'AI',
-  },
-  {
-    name: 'TechCrunch AI',
-    url: 'https://techcrunch.com/category/artificial-intelligence/feed/',
-    defaultTopic: 'AI',
-  },
-];
+import { CURATED_TECH_FEEDS, RssFeedConfig } from './rss-feed-registry';
 
 interface ParsedFeedItem {
   title: string;
