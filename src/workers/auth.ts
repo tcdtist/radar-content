@@ -1,7 +1,7 @@
 import { WorkerEnv } from './pipeline';
 
-export const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
-
+export const DEFAULT_ALLOWED_EMAILS = ['admin@example.com'];
+export const DEFAULT_ADMIN_EMAIL = DEFAULT_ALLOWED_EMAILS[0];
 
 export interface AuthUser {
   email: string;
@@ -100,7 +100,8 @@ export async function verifySessionToken(token: string, secret: string): Promise
 }
 
 export async function verifyGoogleToken(
-  token: string
+  token: string,
+  clientId?: string
 ): Promise<{ email: string; name?: string; picture?: string; email_verified: boolean } | null> {
   try {
     // 1. Try as id_token via tokeninfo
@@ -108,10 +109,12 @@ export async function verifyGoogleToken(
     if (res.ok) {
       const data = (await res.json()) as {
         email?: string;
+        aud?: string;
         name?: string;
         picture?: string;
         email_verified?: string | boolean;
       };
+      if (clientId?.trim() && data.aud && data.aud !== clientId.trim()) return null;
       if (data.email) {
         return {
           email: data.email.toLowerCase(),
@@ -170,8 +173,24 @@ export async function verifyGoogleToken(
 
 export const verifyGoogleIdToken = verifyGoogleToken;
 
+export function getAllowedEmails(env: WorkerEnv): string[] {
+  const raw = env.ALLOWED_EMAILS || env.ADMIN_EMAIL;
+  if (!raw) return DEFAULT_ALLOWED_EMAILS;
+  return raw
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isEmailAllowed(email: string | undefined | null, env: WorkerEnv): boolean {
+  if (!email) return false;
+  return getAllowedEmails(env).includes(email.trim().toLowerCase());
+}
+
 export function getAdminEmail(env: WorkerEnv): string {
-  return (env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL).toLowerCase();
+  if (env.ADMIN_EMAIL) return env.ADMIN_EMAIL.toLowerCase();
+  const allowed = getAllowedEmails(env);
+  return allowed.length > 0 ? allowed[0] : DEFAULT_ADMIN_EMAIL.toLowerCase();
 }
 
 export function getJwtSecret(env: WorkerEnv): string {

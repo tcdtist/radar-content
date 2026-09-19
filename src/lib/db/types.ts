@@ -86,12 +86,25 @@ export interface ScoredIntelligenceCard {
   counter: string[];
   context: string[];
   verification_questions: string[];
-  entities: Array<{ name: string; type: EntityType }>;
+  entities: Array<{ name: string; type: EntityType } | string>;
   sources: Array<{
     title: string;
     url: string;
     source: SourceType;
     author: string | null;
     published_at: number | null;
+    crawled_at?: number | null;
   }>;
 }
+
+export interface CardTranslation {
+  card_id: ClusterId;
+  lang: string;
+  summary: string;
+  evidence: string[];
+  counter: string[];
+  context: string[];
+  verification_questions: string[];
+  translated_at: number;
+}
+

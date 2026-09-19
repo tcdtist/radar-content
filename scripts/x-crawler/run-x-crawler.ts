@@ -1,73 +1,19 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { filterActiveTopicUsers, loadCachedRoster, saveCachedRoster } from './filter-roster';
+import {
+  deduplicateUsers,
+  filterActiveTopicUsers,
+  loadCachedRoster,
+  saveCachedRoster,
+} from './filter-roster';
 import { formatTweetToPost } from './format-post';
-import { CrawlerOptions, FormattedPost, XUser } from './types';
+import { parseCrawlerArgs } from './parse-crawler-args';
+import { FormattedPost, XUser } from './types';
 import { XApiClient } from './x-api-client';
 
-/**
- * Helper to parse simple .env or .dev.vars files without extra dependencies.
- */
-function loadEnvFile(filePath: string): void {
-  try {
-    if (!fs.existsSync(filePath)) return;
-    const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const idx = trimmed.indexOf('=');
-      if (idx !== -1) {
-        const key = trimmed.slice(0, idx).trim();
-        let val = trimmed.slice(idx + 1).trim();
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-          val = val.slice(1, -1);
-        }
-        if (!process.env[key]) {
-          process.env[key] = val;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn(`Could not read env file ${filePath}:`, err);
-  }
-}
-
-// Load env vars from .dev.vars or .env
-loadEnvFile(path.resolve(process.cwd(), '.dev.vars'));
-loadEnvFile(path.resolve(process.cwd(), '.env'));
-
-function parseArgs(): CrawlerOptions {
-  const args = process.argv.slice(2);
-  const options: CrawlerOptions = {
-    seedUser: 'goon_nguyen',
-    limit: 5,
-    dryRun: false,
-    mock: false,
-    apiUrl: 'http://localhost:8787/api/ingest',
-    processNow: false,
-    authToken: process.env.X_AUTH_TOKEN,
-    ct0: process.env.X_CT0,
-  };
-
-  for (const arg of args) {
-    if (arg.startsWith('--seed=')) options.seedUser = arg.split('=')[1];
-    if (arg.startsWith('--limit=')) options.limit = parseInt(arg.split('=')[1], 10) || 5;
-    if (arg === '--dry-run') options.dryRun = true;
-    if (arg === '--mock') options.mock = true;
-    if (arg.startsWith('--api-url=')) options.apiUrl = arg.split('=')[1];
-    if (arg === '--process-now') options.processNow = true;
-    if (arg.startsWith('--auth-token=')) options.authToken = arg.split('=')[1];
-    if (arg.startsWith('--ct0=')) options.ct0 = arg.split('=')[1];
-  }
-
-  return options;
-}
-
 async function main(): Promise<void> {
-  const opts = parseArgs();
+  const opts = parseCrawlerArgs();
   console.log('📡 [X-Crawler] Starting 100% Free DIY Twitter Harvester...');
-  console.log(`👤 Seed Account: @${opts.seedUser}`);
-  console.log(`🎯 Limit: ${opts.limit} users | Dry Run: ${opts.dryRun} | Mock Mode: ${opts.mock}`);
+  console.log(`👤 Seed Accounts: ${opts.seedUsers.map((u) => `@${u}`).join(', ')}`);
+  console.log(`🎯 Limit: ${opts.limit} users | Direct Seed: ${opts.includeSeed} | Following: ${opts.includeFollowing} | Mock: ${opts.mock}`);
 
   const client = new XApiClient({
     authToken: opts.authToken,
@@ -75,40 +21,71 @@ async function main(): Promise<void> {
     isMock: opts.mock,
   });
 
-  // Step 1: Discover & Filter Following Roster
-  let roster: XUser[] | null = loadCachedRoster(opts.seedUser);
+  // Step 1: Discover & Filter Accounts (Seeds + Curated Following Network)
+  const candidateUsers: XUser[] = [];
 
-  if (!roster || roster.length === 0) {
-    console.log(`🔍 Cache miss. Resolving seed profile @${opts.seedUser}...`);
-    const seedProfile = await client.getUserProfile(opts.seedUser);
-    console.log(`✅ Seed found: "${seedProfile.name}" (${seedProfile.followingCount} following)`);
+  for (const seedName of opts.seedUsers) {
+    console.log(`\n🔍 Processing seed @${seedName}...`);
+    let seedProfile: XUser | null = null;
+    try {
+      seedProfile = await client.getUserProfile(seedName);
+      console.log(`✅ Seed resolved: "${seedProfile.name}" (@${seedProfile.screenName})`);
+    } catch (err) {
+      console.warn(`⚠️ Could not resolve seed @${seedName}:`, err);
+    }
 
-    console.log('📥 Fetching following list...');
-    const rawFollowing = await client.getFollowingList(seedProfile, 40);
-    console.log(`📊 Retrieved ${rawFollowing.length} accounts. Filtering active tech/AI builders...`);
+    if (opts.includeSeed && seedProfile) {
+      candidateUsers.push(seedProfile);
+    }
 
-    roster = filterActiveTopicUsers(rawFollowing);
-    saveCachedRoster(opts.seedUser, roster);
-    console.log(`💾 Filtered & cached ${roster.length} high-signal topic builders.`);
-  } else {
-    console.log(`⚡ Loaded ${roster.length} curated accounts from local cache.`);
+    if (opts.includeFollowing && seedProfile) {
+      let cachedFollowing = loadCachedRoster(seedName);
+      if (!cachedFollowing || cachedFollowing.length === 0) {
+        console.log(`  📥 Fetching following list for @${seedName}...`);
+        try {
+          const rawFollowing = await client.getFollowingList(seedProfile, 40);
+          cachedFollowing = filterActiveTopicUsers(rawFollowing);
+          saveCachedRoster(seedName, cachedFollowing);
+          console.log(`  💾 Filtered & cached ${cachedFollowing.length} builders for @${seedName}.`);
+        } catch (err) {
+          console.warn(`  ⚠️ Failed fetching following for @${seedName}:`, err);
+          cachedFollowing = [];
+        }
+      } else {
+        console.log(`  ⚡ Loaded ${cachedFollowing.length} accounts from cache for @${seedName}.`);
+      }
+      candidateUsers.push(...cachedFollowing);
+    }
   }
 
-  // Step 2: Fetch Tweets and Top Discussion Comments
-  const targetUsers = roster.slice(0, opts.limit);
+  // Deduplicate across seeds and following networks
+  const uniqueUsers = deduplicateUsers(candidateUsers);
+  console.log(`\n🎯 Candidate Pool: ${uniqueUsers.length} unique accounts across ${opts.seedUsers.length} seed(s).`);
+  const targetUsers = uniqueUsers.slice(0, opts.limit);
   const postsToIngest: FormattedPost[] = [];
+  const seenTweetIds = new Set<string>();
 
+  // Step 2: Fetch Tweets and Top Discussion Comments
   for (const user of targetUsers) {
     console.log(`\n🔎 Scanning @${user.screenName} (${user.topicTags?.join(', ') || 'Tech'})...`);
-    const allTweets = await client.getUserTweets(user.screenName, 5);
-    const originalTweets = allTweets.filter((t) => !t.text.startsWith('RT @')).slice(0, 2);
-    console.log(`  Found ${allTweets.length} tweets (${originalTweets.length} original non-RTs).`);
+    try {
+      const allTweets = await client.getUserTweets(user.screenName, 5);
+      const originalTweets = allTweets
+        .filter((t) => !t.text.startsWith('RT @'))
+        .filter((t) => !seenTweetIds.has(t.id))
+        .slice(0, 2);
 
-    for (const tweet of originalTweets) {
-      const comments = await client.getTweetComments(tweet.id);
-      const post = formatTweetToPost(tweet, comments);
-      postsToIngest.push(post);
-      console.log(`  ➕ Captured: "${post.title.slice(0, 50)}..." (${comments.length} comments)`);
+      console.log(`  Found ${allTweets.length} tweets (${originalTweets.length} original non-RTs).`);
+
+      for (const tweet of originalTweets) {
+        seenTweetIds.add(tweet.id);
+        const comments = await client.getTweetComments(tweet.id);
+        const post = formatTweetToPost(tweet, comments);
+        postsToIngest.push(post);
+        console.log(`  ➕ Captured: "${post.title.slice(0, 50)}..." (${comments.length} comments)`);
+      }
+    } catch (err) {
+      console.warn(`  ⚠️ Failed fetching tweets for @${user.screenName}:`, err);
     }
   }
 

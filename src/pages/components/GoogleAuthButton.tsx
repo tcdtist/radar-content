@@ -43,13 +43,13 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ onLogin }) =
 
   const handleGoogleSignIn = () => {
     if (!clientId) {
-      alert('Google Client ID chưa được cấu hình.');
+      alert('Google Client ID is not configured.');
       return;
     }
 
     loadGsiScript(() => {
       if (!window.google?.accounts?.oauth2) {
-        alert('Đang tải thư viện Google, vui lòng thử lại sau 1 giây.');
+        alert('Loading Google identity services, please retry in a moment.');
         return;
       }
 
@@ -68,7 +68,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ onLogin }) =
               const loginRes = await onLogin(res.access_token);
               setIsLoading(false);
               if (!loginRes.success) {
-                alert(loginRes.error || 'Đăng nhập Google thất bại');
+                alert(loginRes.error || 'Google sign-in failed');
               }
             }
           },
@@ -89,7 +89,6 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ onLogin }) =
       size="md"
       onClick={handleGoogleSignIn}
       isLoading={isLoading}
-      title="Đăng nhập tài khoản Google Admin"
       style={{
         display: 'inline-flex',
         alignItems: 'center',

@@ -31,6 +31,10 @@ max_batch_timeout = 30
 # binding = "CACHE"
 # id = "placeholder"
 
+# Workers AI binding for on-demand multilingual translation fallback
+[ai]
+binding = "AI"
+
 [vars]
 GEMINI_MODEL = "gemini-3.6-flash"
 CRAWL_SOURCES = "rss,hn,lobsters,reddit"

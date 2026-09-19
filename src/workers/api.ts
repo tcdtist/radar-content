@@ -1,21 +1,24 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getUnprocessedArticles } from '../lib/db/article-queries';
-import { getDashboardStats, queryCards, updateCardStatus } from '../lib/db/cluster-queries';
-import { CardStatus, makeClusterId } from '../lib/db/types';
+import { getDashboardStats } from '../lib/db/cluster-queries';
 import { CrawlerRegistry } from '../lib/sources/crawler-registry';
 import { getActiveSlotsForFrequency, getLocalHour, shouldExecuteCrawl } from '../lib/sources/schedule-manager';
 import { executeScheduledCrawl, processArticlePipeline, QueueMessageBody, WorkerEnv } from './pipeline';
 import { handleIngestPosts, IngestRequestPayload } from './ingest-handler';
 import { authApp, requireAdmin } from './auth-routes';
+import { adminApp } from './admin-routes';
+import { cardsApp } from './cards-routes';
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
 
 // Enable CORS for frontend Vite development
 app.use('*', cors());
 
-// Auth routes (Google OAuth, passkey login, session check)
+// Modular sub-routers
 app.route('/api/auth', authApp);
+app.route('/api/admin', adminApp);
+app.route('/api/cards', cardsApp);
 
 // Health check
 app.get('/', (c) => {
@@ -32,41 +35,6 @@ app.get('/api/stats', requireAdmin, async (c) => {
   try {
     const stats = await getDashboardStats(c.env.DB);
     return c.json({ success: true, stats });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ success: false, error: message }, 500);
-  }
-});
-
-// Get scored intelligence cards with filters
-app.get('/api/cards', async (c) => {
-  const topic = c.req.query('topic') || 'all';
-  const status = c.req.query('status') || 'READY,LEAD';
-  const sort = (c.req.query('sort') as 'score' | 'newest' | 'evidence') || 'score';
-  const page = c.req.query('page') ? parseInt(c.req.query('page')!, 10) : undefined;
-  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : undefined;
-
-  try {
-    const cards = await queryCards(c.env.DB, { topic, status, sort, page, limit });
-    return c.json({ success: true, cards, page: page || 1, limit: limit || 50, filters: { topic, status, sort } });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ success: false, cards: [], error: message }, 500);
-  }
-});
-
-// Update card status (Save, Dismiss, Written) - Requires Admin
-app.post('/api/cards/:id/action', requireAdmin, async (c) => {
-  const { id } = c.req.param();
-  const { action } = await c.req.json<{ action: CardStatus }>();
-
-  if (!['READY', 'LEAD', 'SAVED', 'WRITTEN', 'DISMISSED'].includes(action)) {
-    return c.json({ success: false, error: 'Invalid card action status' }, 400);
-  }
-
-  try {
-    const success = await updateCardStatus(c.env.DB, makeClusterId(id), action);
-    return c.json({ id, action, success });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ success: false, error: message }, 500);

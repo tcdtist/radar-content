@@ -1,0 +1,152 @@
+/* Slide-in Detail Panel & Drawer */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.drawer-panel {
+  width: 100%;
+  max-width: 680px;
+  height: 100vh;
+  background-color: var(--bg-secondary);
+  border-left: 1px solid var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -15px 0 35px rgba(0, 0, 0, 0.4);
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.drawer-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--bg-tertiary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.drawer-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+
+.drawer-body::-webkit-scrollbar {
+  width: 6px;
+}
+.drawer-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.drawer-body::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+.drawer-body::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-coral);
+}
+
+.drawer-tabs-nav {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  position: sticky;
+  top: -1.5rem;
+  z-index: 10;
+  background-color: var(--bg-secondary);
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+  padding: 0.75rem 1.5rem 0.65rem 1.5rem;
+  border-bottom: 1px solid var(--bg-tertiary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.drawer-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.drawer-tabs-nav .btn {
+  flex-shrink: 0;
+}
+
+.drawer-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--bg-tertiary);
+  background-color: var(--bg-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.drawer-footer-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .drawer-panel {
+    max-width: 100vw;
+  }
+  .drawer-header {
+    padding: 1rem 1.15rem;
+  }
+  .drawer-body {
+    padding: 1.15rem 1rem;
+  }
+  .drawer-tabs-nav {
+    top: -1.15rem;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: 0.65rem;
+    padding-bottom: 0.55rem;
+  }
+  .drawer-footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.85rem 1rem;
+    gap: 0.65rem;
+  }
+  .drawer-footer-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+    width: 100%;
+  }
+  .drawer-footer-actions .btn {
+    width: 100%;
+    padding: 0.45rem 0.2rem;
+    font-size: 0.75rem;
+    justify-content: center;
+  }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

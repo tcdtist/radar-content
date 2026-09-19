@@ -1,0 +1,53 @@
+name: Sync Mock Cards Snapshot
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [sync-mock-cards]
+
+concurrency:
+  group: sync-mock-cards
+  cancel-in-progress: true
+
+jobs:
+  sync-cards:
+    name: Fetch Top 12 Cards & Commit Snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RADAR_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Mock Sync Script
+        run: npx tsx scripts/sync-mock-cards.ts
+
+      - name: Verify Types & Test Suite
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "tcdtist"
+          git config user.email "54889078+tcdtist@users.noreply.github.com"
+          if [[ -n $(git status --porcelain src/lib/data/) ]]; then
+            git add src/lib/data/
+            git commit -m "chore: sync top 12 mock cards snapshot [skip ci]"
+            git push origin main
+            echo "Successfully committed and pushed refreshed mock cards snapshot."
+          else
+            echo "No changes detected in mock cards."
+          fi

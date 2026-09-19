@@ -59,7 +59,7 @@ export async function queryCards(
 
     // Fetch linked articles and extractions
     const articleQuery = await db.prepare(`
-      SELECT a.id, a.title, a.url, a.source, a.author, a.published_at,
+      SELECT a.id, a.title, a.url, a.source, a.author, a.published_at, a.crawled_at,
              e.summary, e.evidence, e.counter, e.context, e.verification_questions
       FROM cluster_articles ca
       JOIN articles a ON ca.article_id = a.id
@@ -73,6 +73,7 @@ export async function queryCards(
       source: SourceType;
       author: string | null;
       published_at: number | null;
+      crawled_at: number | null;
       summary: string | null;
       evidence: string | null;
       counter: string | null;
@@ -143,6 +144,7 @@ export async function queryCards(
         source: a.source,
         author: a.author,
         published_at: a.published_at,
+        crawled_at: a.crawled_at,
       })),
     });
   }

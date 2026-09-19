@@ -2,6 +2,7 @@ import React from 'react';
 import { CardStatus, ScoredIntelligenceCard } from '../../lib/db/types';
 import { EmptyState } from './EmptyState';
 import { IntelligenceCard } from './IntelligenceCard';
+import { LockedTeaserCard } from './LockedTeaserCard';
 
 interface CardGridProps {
   cards: ScoredIntelligenceCard[];
@@ -14,6 +15,7 @@ interface CardGridProps {
   isCrawling?: boolean;
   isProcessing?: boolean;
   isSyncing?: boolean;
+  isAdmin?: boolean;
 }
 
 export const CardGrid: React.FC<CardGridProps> = ({
@@ -27,11 +29,12 @@ export const CardGrid: React.FC<CardGridProps> = ({
   isCrawling = false,
   isProcessing = false,
   isSyncing = false,
+  isAdmin = false,
 }) => {
   if (isLoading) {
     return (
       <div className="card-grid">
-        {[1, 2, 3, 4].map((n) => (
+        {[1, 2, 3, 4, 5, 6].map((n) => (
           <div
             key={n}
             className="base-card"
@@ -97,15 +100,19 @@ export const CardGrid: React.FC<CardGridProps> = ({
   }
 
   return (
-    <div className="card-grid">
-      {cards.map((card) => (
-        <IntelligenceCard
-          key={card.id}
-          card={card}
-          onSelect={onSelect}
-          onAction={onAction}
-        />
-      ))}
+    <div>
+      <div className="card-grid">
+        {cards.map((card) => (
+          <IntelligenceCard
+            key={card.id}
+            card={card}
+            onSelect={onSelect}
+            onAction={onAction}
+          />
+        ))}
+      </div>
+      {!isAdmin && <LockedTeaserCard />}
     </div>
   );
 };
+

@@ -124,14 +124,14 @@ describe('Frontend Authentication & Role Permissions', () => {
       status: 403,
       json: async () => ({
         success: false,
-        error: 'Tài khoản không có quyền quản trị.',
+        error: 'Account is not authorized for administrator access.',
       }),
     });
     vi.stubGlobal('fetch', mockFetch);
 
     const result = await loginWithGoogleToken('google-token-from-other-user');
     expect(result.success).toBe(false);
-    expect(result.error).toContain('không có quyền quản trị');
+    expect(result.error).toContain('not authorized for administrator access');
     expect(isAdmin()).toBe(false);
   });
 

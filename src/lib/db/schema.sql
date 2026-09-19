@@ -79,3 +79,25 @@ CREATE INDEX IF NOT EXISTS idx_clusters_status ON clusters(status);
 CREATE INDEX IF NOT EXISTS idx_clusters_score ON clusters(score DESC);
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
 CREATE INDEX IF NOT EXISTS idx_article_entities_entity ON article_entities(entity_id);
+
+-- Daily top-12 mock snapshot for guests
+CREATE TABLE IF NOT EXISTS mock_snapshot (
+  id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  sync_date TEXT NOT NULL
+);
+
+-- On-demand translations cache for cards
+CREATE TABLE IF NOT EXISTS card_translations (
+  card_id TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+  lang TEXT NOT NULL DEFAULT 'vi',
+  summary TEXT NOT NULL,
+  evidence TEXT NOT NULL,
+  counter TEXT NOT NULL,
+  context TEXT NOT NULL,
+  verification_questions TEXT NOT NULL,
+  translated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (card_id, lang)
+);
+

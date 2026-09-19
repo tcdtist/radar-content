@@ -64,12 +64,21 @@ export class XApiClient {
   }
 
   async getUserProfile(screenName: string): Promise<XUser> {
+    const cleanName = screenName.replace(/^@/, '');
     if (this.isMock) {
-      const found = MOCK_SEED_USERS.find((u) => u.screenName.toLowerCase() === screenName.toLowerCase());
-      return found || MOCK_SEED_USERS[0];
+      const found = MOCK_SEED_USERS.find((u) => u.screenName.toLowerCase() === cleanName.toLowerCase());
+      if (found) return found;
+      return {
+        id: `user_${cleanName.toLowerCase()}`,
+        screenName: cleanName,
+        name: cleanName,
+        description: 'Indie builder and engineer building software and AI systems.',
+        followersCount: 5000,
+        followingCount: 200,
+        statusesCount: 150,
+      };
     }
 
-    const cleanName = screenName.replace(/^@/, '');
     const data = await this.fetchGQL<Record<string, unknown>>(OP_USER_BY_SCREEN_NAME, {
       screen_name: cleanName,
     });
@@ -79,7 +88,7 @@ export class XApiClient {
 
   async getFollowingList(seedUser: XUser, limit = 40): Promise<XUser[]> {
     if (this.isMock) {
-      return MOCK_SEED_USERS;
+      return MOCK_SEED_USERS.filter((u) => u.screenName.toLowerCase() !== seedUser.screenName.toLowerCase());
     }
 
     const data = await this.fetchGQL<Record<string, unknown>>(OP_FOLLOWING, {
@@ -92,8 +101,31 @@ export class XApiClient {
   }
 
   async getUserTweets(screenName: string, count = 5): Promise<XTweet[]> {
+    const cleanName = screenName.replace(/^@/, '');
     if (this.isMock) {
-      return MOCK_TWEETS_WITH_COMMENTS.map((item) => item.tweet);
+      const authorTweets = MOCK_TWEETS_WITH_COMMENTS
+        .map((item) => item.tweet)
+        .filter((t) => t.author.toLowerCase() === cleanName.toLowerCase());
+
+      if (authorTweets.length > 0) {
+        return authorTweets.slice(0, count);
+      }
+
+      return [
+        {
+          id: `tweet_${cleanName}_mock_1`,
+          text: `Building and evaluating new AI coding workflows with LLM agent systems and edge SQLite.`,
+          author: cleanName,
+          authorName: cleanName,
+          createdAt: Math.floor(Date.now() / 1000) - 7200,
+          replyCount: 5,
+          retweetCount: 12,
+          likeCount: 65,
+          url: `https://x.com/${cleanName}/status/tweet_${cleanName}_mock_1`,
+          isRetweet: false,
+          isReply: false,
+        },
+      ];
     }
 
     const userProfile = await this.getUserProfile(screenName);

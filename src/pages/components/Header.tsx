@@ -90,9 +90,15 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <span className="terminal-prompt">&gt;</span> radar_content
             </h1>
-            <span className="badge badge-ready" style={{ fontSize: '0.65rem' }}>
-              D1 LIVE
-            </span>
+            {isAdmin ? (
+              <span className="badge badge-ready font-mono" style={{ fontSize: '0.65rem' }}>
+                D1 LIVE
+              </span>
+            ) : (
+              <span className="badge badge-lead font-mono" style={{ fontSize: '0.65rem' }}>
+                DEMO PREVIEW
+              </span>
+            )}
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
             AI Content Intelligence • Graph Community Detection • Cloudflare Serverless
@@ -125,7 +131,6 @@ export const Header: React.FC<HeaderProps> = ({
                 alignItems: 'center',
                 gap: '0.35rem',
               }}
-              title="Administrator mode active"
             >
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-success)' }} />
               ADMIN
@@ -135,7 +140,6 @@ export const Header: React.FC<HeaderProps> = ({
               variant="ghost"
               size="md"
               onClick={onLogout}
-              title="Logout"
             >
               <span>Logout</span>
             </BaseButton>
@@ -151,7 +155,6 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={handleCrawlClick}
           disabled={isCrawling || isProcessing || isSyncing}
           isLoading={isCrawling}
-          title={isAdmin ? 'Crawl sources' : 'Chỉ admin mới có quyền Ingest'}
         >
           {!isAdmin ? <LockIcon size={13} color="var(--text-muted)" /> : <RefreshIcon size={14} />}
           <span>Ingest</span>
@@ -164,7 +167,6 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={handleProcessClick}
           disabled={isCrawling || isProcessing || isSyncing}
           isLoading={isProcessing}
-          title={isAdmin ? 'Run LLM extraction & clustering' : 'Chỉ admin mới có quyền Run Intelligence'}
         >
           {!isAdmin ? <LockIcon size={13} color="#ffffff" /> : <BrainIcon size={14} color="#ffffff" />}
           <span>Run Intelligence</span>

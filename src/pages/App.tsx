@@ -3,23 +3,23 @@ import { CardStatus, ScoredIntelligenceCard } from '../lib/db/types';
 import { CardGrid } from './components/CardGrid';
 import { DetailPanel } from './components/DetailPanel';
 import { FilterBar } from './components/FilterBar';
+import { Footer } from './components/Footer';
 import { Header } from './components/Header';
 import { Pagination } from './components/Pagination';
+import { PreviewBanner } from './components/PreviewBanner';
 import { StatsBar } from './components/StatsBar';
+import { fetchCardById } from './services/client';
 import { useAuth } from './hooks/useAuth';
 import { useFilteredCards } from './hooks/useFilteredCards';
 import { useIntelligenceFeed } from './hooks/useIntelligenceFeed';
+import { useMobileScrollPersistence } from './hooks/useMobileScrollPersistence';
+import { useTheme } from './hooks/useTheme';
+import { useUrlNavigation } from './hooks/useUrlNavigation';
 
 export const App: React.FC = () => {
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme');
-      return saved === 'light' ? 'light' : 'dark';
-    }
-    return 'dark';
-  });
-
+  const { theme, toggleTheme } = useTheme();
   const [selectedCard, setSelectedCard] = useState<ScoredIntelligenceCard | null>(null);
+  const { cardId: urlCardId, activeTab: urlActiveTab, openCard, changeTab, closeCard } = useUrlNavigation();
 
   const { isAdmin, loginWithGoogle, logout } = useAuth();
 
@@ -57,46 +57,56 @@ export const App: React.FC = () => {
     totalPages,
   } = useFilteredCards({ cards });
 
+  useMobileScrollPersistence(!isLoading && cards.length > 0);
+
+  // Synchronize selectedCard with URL deep-link / reload
   useEffect(() => {
-    document.documentElement.className = theme;
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
-  const handleProtectedSyncCrawl = () => {
-    if (!isAdmin) {
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.prompt();
-      }
+    if (!urlCardId) {
+      if (selectedCard) setSelectedCard(null);
       return;
     }
-    handleSyncCrawl();
+    if (selectedCard && selectedCard.id === urlCardId) return;
+
+    const found = cards.find((c) => c.id === urlCardId);
+    if (found) {
+      setSelectedCard(found);
+    } else if (!isLoading) {
+      fetchCardById(urlCardId).then((c) => {
+        if (c) setSelectedCard(c);
+      });
+    }
+  }, [urlCardId, cards, isLoading, selectedCard]);
+
+  const triggerGoogleSignIn = () => {
+    const btn = document.getElementById('btn-google-login');
+    if (btn) {
+      btn.click();
+    } else if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
+    }
   };
 
-  const handleProtectedSyncProcess = () => {
-    if (!isAdmin) {
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.prompt();
-      }
-      return;
-    }
-    handleSyncProcess();
+  const handleProtectedAction = (action: () => void) => {
+    if (!isAdmin) triggerGoogleSignIn();
+    else action();
   };
 
   const handleAction = async (id: string, action: CardStatus) => {
     if (!isAdmin) {
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.prompt();
-      }
+      triggerGoogleSignIn();
       return;
     }
     if (selectedCard && selectedCard.id === id) {
       setSelectedCard((prev) => (prev ? { ...prev, status: action } : null));
     }
     await baseHandleAction(id, action);
+  };
+
+  const handleResetFilters = () => {
+    setActiveTopic('all');
+    setActiveStatus('READY,LEAD');
+    setActiveSort('score');
+    resetFilters();
   };
 
   const handlePageChange = (newPage: number) => {
@@ -107,8 +117,8 @@ export const App: React.FC = () => {
   return (
     <div className="container">
       <Header
-        onSyncCrawl={handleProtectedSyncCrawl}
-        onSyncProcess={handleProtectedSyncProcess}
+        onSyncCrawl={() => handleProtectedAction(handleSyncCrawl)}
+        onSyncProcess={() => handleProtectedAction(handleSyncProcess)}
         isCrawling={isCrawling}
         isProcessing={isProcessing}
         isSyncing={isSyncing}
@@ -119,7 +129,7 @@ export const App: React.FC = () => {
         onLoginGoogle={loginWithGoogle}
       />
 
-      {isAdmin && <StatsBar stats={stats} />}
+      {isAdmin ? <StatsBar stats={stats} /> : <PreviewBanner />}
 
       <FilterBar
         activeTopic={activeTopic}
@@ -136,14 +146,18 @@ export const App: React.FC = () => {
         <CardGrid
           cards={paginatedCards}
           isLoading={isLoading}
-          onSelect={setSelectedCard}
+          onSelect={(c) => {
+            setSelectedCard(c);
+            openCard(c.id);
+          }}
           onAction={handleAction}
-          onResetFilters={resetFilters}
-          onSyncCrawl={handleProtectedSyncCrawl}
-          onSyncProcess={handleProtectedSyncProcess}
+          onResetFilters={handleResetFilters}
+          onSyncCrawl={() => handleProtectedAction(handleSyncCrawl)}
+          onSyncProcess={() => handleProtectedAction(handleSyncProcess)}
           isCrawling={isCrawling}
           isProcessing={isProcessing}
           isSyncing={isSyncing}
+          isAdmin={isAdmin}
         />
 
         <Pagination
@@ -156,11 +170,20 @@ export const App: React.FC = () => {
         />
       </main>
 
+      <Footer />
+
       <DetailPanel
         card={selectedCard}
-        onClose={() => setSelectedCard(null)}
+        onClose={() => {
+          setSelectedCard(null);
+          closeCard();
+        }}
         onAction={handleAction}
+        isAdmin={isAdmin}
+        activeTab={urlActiveTab}
+        onTabChange={changeTab}
       />
     </div>
   );
 };
+
