@@ -75,6 +75,7 @@ export class GeminiClient {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(15000),
           });
 
           if (response.status === 404) {
@@ -84,19 +85,19 @@ export class GeminiClient {
           }
 
           if (response.status === 429) {
-            if (attempt < this.maxRetriesPerModel) {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              continue;
-            } else {
-              console.warn(`[GeminiClient] Model '${model}' quota exhausted (HTTP 429). Rotating to next tier...`);
-              shouldRotate = true;
-              break;
-            }
+            console.warn(`[GeminiClient] Model '${model}' quota exhausted (HTTP 429). Rotating to next tier immediately...`);
+            shouldRotate = true;
+            break;
+          }
+
+          if (response.status === 401 || response.status === 403) {
+            const errText = await response.text();
+            throw new Error(`Gemini fatal auth error HTTP ${response.status}: ${errText}`);
           }
 
           if (response.status >= 500) {
             if (attempt < this.maxRetriesPerModel) {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
+              await new Promise((resolve) => setTimeout(resolve, 1500));
               continue;
             } else {
               console.warn(`[GeminiClient] Model '${model}' server error HTTP ${response.status}. Rotating...`);
@@ -107,6 +108,17 @@ export class GeminiClient {
 
           if (!response.ok) {
             const errText = await response.text();
+            const isGeoBlocked =
+              errText.includes('location is not supported') ||
+              errText.includes('FAILED_PRECONDITION');
+
+            if (isGeoBlocked) {
+              console.warn(`[GeminiClient] Fatal geo-blocking detected (HTTP ${response.status}): ${errText.slice(0, 100)}. Aborting Gemini rotation.`);
+              throw new Error(`Gemini fatal geo-block error HTTP ${response.status}: ${errText}`);
+            }
+
+            // Client errors (400) should not retry on the same model
+            shouldRotate = true;
             throw new Error(`Gemini API HTTP ${response.status}: ${errText}`);
           }
 
@@ -120,6 +132,13 @@ export class GeminiClient {
           return text;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
+          // If fatal auth or geo-block error, abort immediately across all models
+          if (
+            lastError.message.includes('Gemini fatal geo-block error') ||
+            lastError.message.includes('Gemini fatal auth error')
+          ) {
+            throw lastError;
+          }
           if (attempt >= this.maxRetriesPerModel) {
             shouldRotate = true;
           }

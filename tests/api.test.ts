@@ -158,9 +158,15 @@ describe('Worker Hono API Routes & Auth Protection', () => {
 
     const res = await worker.fetch(req, mockEnv, mockCtx);
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { authenticated: boolean; user?: { email: string } };
+    const data = (await res.json()) as { success: boolean; authenticated: boolean; user?: { email: string } };
+    expect(data.success).toBe(true);
     expect(data.authenticated).toBe(true);
     expect(data.user?.email).toBe('admin@example.com');
+
+    // Unauthenticated request returns 401
+    const unauthReq = new Request('http://localhost/api/auth/me', { method: 'GET' });
+    const unauthRes = await worker.fetch(unauthReq, mockEnv, mockCtx);
+    expect(unauthRes.status).toBe(401);
   });
 
   it('GET /api/auth/config returns public googleClientId', async () => {

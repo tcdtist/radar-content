@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { ScoredIntelligenceCard } from '../../lib/db/types';
 
-const MIN_DATE_TIMESTAMP = 1788998400; // 2026-09-10T00:00:00Z
+// Rolling 30-day cutoff for active signals (SAVED and WRITTEN cards are immune)
+const ROLLING_WINDOW_SECONDS = 30 * 86400;
 
 interface UseFilteredCardsParams {
   cards: ScoredIntelligenceCard[];
@@ -23,10 +24,14 @@ export function useFilteredCards({ cards }: UseFilteredCardsParams) {
   };
 
   const filteredCards = useMemo(() => {
+    const rollingCutoff = Math.floor(Date.now() / 1000) - ROLLING_WINDOW_SECONDS;
     let result = cards.filter(
       (c) =>
-        c.created_at >= MIN_DATE_TIMESTAMP ||
-        c.sources.some((s) => (s.published_at || 0) >= MIN_DATE_TIMESTAMP)
+        c.id.startsWith('clu_mock_') ||
+        c.status === 'SAVED' ||
+        c.status === 'WRITTEN' ||
+        c.created_at >= rollingCutoff ||
+        Boolean(c.sources?.some((s) => (s.published_at || 0) >= rollingCutoff))
     );
 
     if (searchQuery.trim()) {

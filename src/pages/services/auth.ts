@@ -8,7 +8,9 @@ export interface AuthUser {
 const STORAGE_TOKEN_KEY = 'radar_auth_token';
 const STORAGE_USER_KEY = 'radar_auth_user';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  '/api';
 
 type AuthListener = (user: AuthUser | null) => void;
 const listeners: Set<AuthListener> = new Set();
@@ -114,13 +116,13 @@ export async function loginWithEmail(
       error?: string;
     };
     if (!res.ok || !data.success || !data.token || !data.user) {
-      return { success: false, error: data.error || `Đăng nhập thất bại (HTTP ${res.status})` };
+      return { success: false, error: data.error || `Login failed (HTTP ${res.status})` };
     }
 
     setSession(data.token, data.user);
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Lỗi kết nối khi đăng nhập';
+    const message = err instanceof Error ? err.message : 'Network error during login';
     return { success: false, error: message };
   }
 }
@@ -165,8 +167,8 @@ export async function checkSession(): Promise<boolean> {
       logout();
       return false;
     }
-    const data = await res.json() as { success: boolean; user?: AuthUser };
-    if (data.success && data.user) {
+    const data = (await res.json()) as { success?: boolean; authenticated?: boolean; user?: AuthUser };
+    if ((data.success || data.authenticated) && data.user) {
       setSession(token, data.user);
       return true;
     }

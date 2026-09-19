@@ -41,14 +41,18 @@ export interface XDiscussionThread {
 }
 
 export interface CuratedRosterFile {
-  seedUser: string;
-  updatedAt: number;
-  users: XUser[];
+  seedUser?: string;
+  updatedAt?: number;
+  users?: XUser[];
+  seeds?: Record<string, { updatedAt: number; users: XUser[] }>;
 }
 
 export interface CrawlerOptions {
-  seedUser: string;
+  seedUsers: string[];
+  seedUser?: string;
   limit: number;
+  includeSeed: boolean;
+  includeFollowing: boolean;
   dryRun: boolean;
   mock: boolean;
   apiUrl: string;

@@ -10,15 +10,20 @@ import { CrawlerRegistry } from '../lib/sources/crawler-registry';
 export interface WorkerEnv {
   DB: D1Database;
   ARTICLE_QUEUE?: Queue;
+  AI?: any;
   GEMINI_API_KEY?: string;
+  GEMINI_TRANSLATION_KEY?: string;
   GEMINI_MODEL?: string;
   CRAWL_SOURCES?: string;
   CRAWL_FREQUENCY?: string;
   TIMEZONE?: string;
   ADMIN_EMAIL?: string;
+  ALLOWED_EMAILS?: string;
   ADMIN_SECRET?: string;
   JWT_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
+  RADAR_GITHUB_TOKEN?: string;
+  GITHUB_REPOSITORY?: string;
 }
 
 export interface QueueMessageBody {

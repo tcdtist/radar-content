@@ -37,6 +37,15 @@ export const MOCK_SEED_USERS: XUser[] = [
     followingCount: 980,
     statusesCount: 12000,
   },
+  {
+    id: 'user_tdinh_me',
+    screenName: 'tdinh_me',
+    name: 'Tony Dinh',
+    description: 'Indie hacker building AI tools and software products. Creator of TypingMind. Shipping fast with AI and LLMs.',
+    followersCount: 115000,
+    followingCount: 650,
+    statusesCount: 9200,
+  },
 ];
 
 export const MOCK_TWEETS_WITH_COMMENTS: Array<{ tweet: XTweet; comments: XComment[] }> = [

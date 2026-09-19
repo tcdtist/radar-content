@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ALLOWED_EMAILS,
   getAdminEmail,
+  getAllowedEmails,
   getJwtSecret,
+  isEmailAllowed,
   SessionPayload,
   signSessionToken,
   verifySessionToken,
@@ -93,5 +96,40 @@ describe('Auth & Session Tokens (WebCrypto HMAC-SHA256)', () => {
       JWT_SECRET: 'my-custom-jwt-secret',
     };
     expect(getJwtSecret(env)).toBe('my-custom-jwt-secret');
+  });
+
+  describe('Whitelist Normalization & Access Control', () => {
+    it('defaults to admin@example.com when neither ALLOWED_EMAILS nor ADMIN_EMAIL is set', () => {
+      const env: WorkerEnv = { DB: {} as D1Database };
+      expect(getAllowedEmails(env)).toEqual(DEFAULT_ALLOWED_EMAILS);
+      expect(isEmailAllowed('admin@example.com', env)).toBe(true);
+      expect(isEmailAllowed('stranger@gmail.com', env)).toBe(false);
+    });
+
+    it('parses comma-separated ALLOWED_EMAILS with trimming and lowercase conversion', () => {
+      const env: WorkerEnv = {
+        DB: {} as D1Database,
+        ALLOWED_EMAILS: ' lead_dev@domain.com ,  admin@domain.com, CO-WORKER@example.COM  ',
+      };
+      const list = getAllowedEmails(env);
+      expect(list).toEqual(['lead_dev@domain.com', 'admin@domain.com', 'co-worker@example.com']);
+      expect(isEmailAllowed('LEAD_DEV@DOMAIN.COM', env)).toBe(true);
+      expect(isEmailAllowed('admin@domain.com', env)).toBe(true);
+      expect(isEmailAllowed('co-worker@example.com', env)).toBe(true);
+      expect(isEmailAllowed('unauthorized@gmail.com', env)).toBe(false);
+      expect(isEmailAllowed('', env)).toBe(false);
+      expect(isEmailAllowed(null, env)).toBe(false);
+      expect(isEmailAllowed(undefined, env)).toBe(false);
+    });
+
+    it('falls back to ADMIN_EMAIL when ALLOWED_EMAILS is missing', () => {
+      const env: WorkerEnv = {
+        DB: {} as D1Database,
+        ADMIN_EMAIL: 'team_admin@startup.io',
+      };
+      expect(getAllowedEmails(env)).toEqual(['team_admin@startup.io']);
+      expect(isEmailAllowed('team_admin@startup.io', env)).toBe(true);
+      expect(isEmailAllowed('admin@example.com', env)).toBe(false);
+    });
   });
 });

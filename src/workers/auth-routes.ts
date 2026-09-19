@@ -2,6 +2,7 @@ import { Context, Hono, Next } from 'hono';
 import {
   getAdminEmail,
   getJwtSecret,
+  isEmailAllowed,
   signSessionToken,
   verifyGoogleIdToken,
   verifySessionToken,
@@ -32,28 +33,28 @@ authApp.post('/login', async (c) => {
     const password = (body.password || body.secret || '').trim();
 
     if (!password) {
-      return c.json({ success: false, error: 'Vui lòng nhập mật khẩu quản trị' }, 400);
+      return c.json({ success: false, error: 'Admin password is required' }, 400);
     }
 
-    const adminEmail = getAdminEmail(c.env);
+    const targetEmail = rawEmail || getAdminEmail(c.env);
     const configuredSecret = c.env.ADMIN_SECRET || 'radar2026';
 
-    if (rawEmail && rawEmail !== adminEmail) {
-      return c.json({ success: false, error: 'Email không có quyền quản trị' }, 401);
+    if (rawEmail && !isEmailAllowed(rawEmail, c.env)) {
+      return c.json({ success: false, error: 'Email not authorized for admin access' }, 401);
     }
 
     if (password !== configuredSecret && password !== 'radar-admin-secret' && password !== 'radar2026') {
-      return c.json({ success: false, error: 'Mật khẩu quản trị không chính xác' }, 401);
+      return c.json({ success: false, error: 'Incorrect admin password' }, 401);
     }
 
     const jwtSecret = getJwtSecret(c.env);
     const exp = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
-    const token = await signSessionToken({ email: adminEmail, role: 'admin', exp }, jwtSecret);
+    const token = await signSessionToken({ email: targetEmail, role: 'admin', exp }, jwtSecret);
 
     return c.json({
       success: true,
       token,
-      user: { email: adminEmail, role: 'admin' },
+      user: { email: targetEmail, role: 'admin' },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -74,17 +75,16 @@ authApp.post('/google', async (c) => {
       return c.json({ success: false, error: 'Token is required' }, 400);
     }
 
-    const gUser = await verifyGoogleIdToken(rawToken);
+    const gUser = await verifyGoogleIdToken(rawToken, c.env.GOOGLE_CLIENT_ID);
     if (!gUser || !gUser.email_verified) {
       return c.json({ success: false, error: 'Invalid or unverified Google token' }, 401);
     }
 
-    const adminEmail = getAdminEmail(c.env);
-    if (gUser.email !== adminEmail) {
+    if (!isEmailAllowed(gUser.email, c.env)) {
       return c.json(
         {
           success: false,
-          error: 'Tài khoản không có quyền quản trị.',
+          error: `Account ${gUser.email} is not authorized for administrator access.`,
         },
         403
       );
@@ -93,14 +93,14 @@ authApp.post('/google', async (c) => {
     const jwtSecret = getJwtSecret(c.env);
     const exp = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
     const token = await signSessionToken(
-      { email: adminEmail, name: gUser.name, picture: gUser.picture, role: 'admin', exp },
+      { email: gUser.email, name: gUser.name, picture: gUser.picture, role: 'admin', exp },
       jwtSecret
     );
 
     return c.json({
       success: true,
       token,
-      user: { email: adminEmail, name: gUser.name, picture: gUser.picture, role: 'admin' },
+      user: { email: gUser.email, name: gUser.name, picture: gUser.picture, role: 'admin' },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -109,30 +109,51 @@ authApp.post('/google', async (c) => {
 });
 
 /**
+ * Check if incoming request has valid admin credentials (CF Access header or Bearer token)
+ */
+export async function isRequestAuthorized(c: Context<{ Bindings: WorkerEnv }>): Promise<boolean> {
+  const cfAccessEmail = c.req.header('Cf-Access-Authenticated-User-Email');
+  if (cfAccessEmail && isEmailAllowed(cfAccessEmail, c.env)) {
+    return true;
+  }
+
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return false;
+  }
+
+  const token = authHeader.slice(7).trim();
+  const session = await verifySessionToken(token, getJwtSecret(c.env));
+  return Boolean(session && isEmailAllowed(session.email, c.env));
+}
+
+/**
  * Session verification endpoint
  */
 authApp.get('/me', async (c) => {
   const cfAccessEmail = c.req.header('Cf-Access-Authenticated-User-Email');
-  if (cfAccessEmail && cfAccessEmail.toLowerCase() === getAdminEmail(c.env)) {
+  if (cfAccessEmail && isEmailAllowed(cfAccessEmail, c.env)) {
     return c.json({
+      success: true,
       authenticated: true,
-      user: { email: cfAccessEmail, role: 'admin' },
+      user: { email: cfAccessEmail.toLowerCase(), role: 'admin' },
     });
   }
 
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ authenticated: false });
+    return c.json({ success: false, authenticated: false }, 401);
   }
 
   const token = authHeader.slice(7).trim();
   const session = await verifySessionToken(token, getJwtSecret(c.env));
 
-  if (!session || session.email.toLowerCase() !== getAdminEmail(c.env)) {
-    return c.json({ authenticated: false });
+  if (!session || !isEmailAllowed(session.email, c.env)) {
+    return c.json({ success: false, authenticated: false }, 401);
   }
 
   return c.json({
+    success: true,
     authenticated: true,
     user: { email: session.email, name: session.name, picture: session.picture, role: session.role },
   });
@@ -141,28 +162,16 @@ authApp.get('/me', async (c) => {
 /**
  * Middleware: Require authenticated admin
  */
-
 export async function requireAdmin(c: Context<{ Bindings: WorkerEnv }>, next: Next) {
-  const cfAccessEmail = c.req.header('Cf-Access-Authenticated-User-Email');
-  if (cfAccessEmail && cfAccessEmail.toLowerCase() === getAdminEmail(c.env)) {
-    await next();
-    return;
-  }
-
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ success: false, error: 'Unauthorized: Admin authentication required' }, 401);
-  }
-
-  const token = authHeader.slice(7).trim();
-  const session = await verifySessionToken(token, getJwtSecret(c.env));
-
-  if (!session || session.email.toLowerCase() !== getAdminEmail(c.env)) {
-    return c.json(
-      { success: false, error: 'Forbidden: Admin access required' },
-      403
-    );
+  const isAuth = await isRequestAuthorized(c);
+  if (!isAuth) {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return c.json({ success: false, error: 'Unauthorized: Admin authentication required' }, 401);
+    }
+    return c.json({ success: false, error: 'Forbidden: Admin access required' }, 403);
   }
 
   await next();
 }
+

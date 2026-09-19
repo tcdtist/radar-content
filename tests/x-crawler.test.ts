@@ -102,4 +102,57 @@ describe('X Crawler Engine & Roster Filtering', () => {
     const comments = await client.getTweetComments(tweets[0].id);
     expect(comments.length).toBeGreaterThan(0);
   });
+
+  it('parseSeedUsers correctly parses, trims, strips @, and deduplicates user handles', async () => {
+    const { parseSeedUsers } = await import('../scripts/x-crawler/filter-roster');
+    const input = '  @goon_nguyen, tdinh_me, @karpathy , goon_nguyen, ,  @swyx ';
+    const parsed = parseSeedUsers(input);
+    expect(parsed).toEqual(['goon_nguyen', 'tdinh_me', 'karpathy', 'swyx']);
+  });
+
+  it('deduplicateUsers filters out duplicate accounts case-insensitively while preserving order', async () => {
+    const { deduplicateUsers } = await import('../scripts/x-crawler/filter-roster');
+    const list: XUser[] = [
+      { id: '1', screenName: 'goon_nguyen', name: 'Goon', description: '', followersCount: 1, followingCount: 1, statusesCount: 1 },
+      { id: '2', screenName: 'tdinh_me', name: 'Tony', description: '', followersCount: 1, followingCount: 1, statusesCount: 1 },
+      { id: '3', screenName: 'GOON_NGUYEN', name: 'Goon Duplicate', description: '', followersCount: 1, followingCount: 1, statusesCount: 1 },
+      { id: '4', screenName: 'karpathy', name: 'Andrej', description: '', followersCount: 1, followingCount: 1, statusesCount: 1 },
+    ];
+
+    const deduplicated = deduplicateUsers(list);
+    expect(deduplicated).toHaveLength(3);
+    expect(deduplicated.map((u) => u.screenName)).toEqual(['goon_nguyen', 'tdinh_me', 'karpathy']);
+  });
+
+  it('parseCrawlerArgs respects SEED_USERS environment variable and CLI flags', async () => {
+    const { parseCrawlerArgs } = await import('../scripts/x-crawler/parse-crawler-args');
+    const prevEnv = process.env.SEED_USERS;
+    try {
+      process.env.SEED_USERS = 'tdinh_me,altryne';
+      const optsFromEnv = parseCrawlerArgs([]);
+      expect(optsFromEnv.seedUsers).toEqual(['tdinh_me', 'altryne']);
+      expect(optsFromEnv.seedUser).toBe('tdinh_me');
+
+      // CLI override flag
+      const optsFromCli = parseCrawlerArgs(['--seeds=karpathy,swyx', '--direct-only', '--limit=8']);
+      expect(optsFromCli.seedUsers).toEqual(['karpathy', 'swyx']);
+      expect(optsFromCli.includeFollowing).toBe(false);
+      expect(optsFromCli.includeSeed).toBe(true);
+      expect(optsFromCli.limit).toBe(8);
+    } finally {
+      if (prevEnv) {
+        process.env.SEED_USERS = prevEnv;
+      } else {
+        delete process.env.SEED_USERS;
+      }
+    }
+  });
+
+  it('XApiClient retrieves multiple mock seed users seamlessly', async () => {
+    const client = new XApiClient({ isMock: true });
+    const profile1 = await client.getUserProfile('tdinh_me');
+    const profile2 = await client.getUserProfile('goon_nguyen');
+    expect(profile1.screenName).toBe('tdinh_me');
+    expect(profile2.screenName).toBe('goon_nguyen');
+  });
 });
