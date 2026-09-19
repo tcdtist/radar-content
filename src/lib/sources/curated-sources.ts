@@ -46,11 +46,13 @@ export const ELEVATED_DOMAINS: readonly string[] = [
 
 // ── 3. Curated RSS/Atom Feeds ────────────────────────────────────────
 
+export type SourceTierCode = 'T1' | 'T2' | 'T3';
+
 export interface RssFeedConfig {
-  name: string;
-  url: string;
-  defaultTopic?: string;
-  tier?: 'T1' | 'T2' | 'T3';
+  readonly name: string;
+  readonly url: string;
+  readonly defaultTopic?: string;
+  readonly tier?: SourceTierCode;
 }
 
 const T1_AUTHORITY_FEEDS: RssFeedConfig[] = [
@@ -122,7 +124,7 @@ const T3_REFERENCE_FEEDS: RssFeedConfig[] = [
   },
 ];
 
-export const CURATED_TECH_FEEDS: RssFeedConfig[] = [
+export const CURATED_TECH_FEEDS: readonly RssFeedConfig[] = [
   ...T1_AUTHORITY_FEEDS,
   ...T2_DEPTH_FEEDS,
   ...T3_REFERENCE_FEEDS,

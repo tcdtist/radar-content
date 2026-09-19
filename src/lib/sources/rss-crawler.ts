@@ -14,9 +14,9 @@ export class RssCrawler implements SourceCrawler {
   readonly name = 'RssCrawler';
   readonly sourceType = 'rss' as const;
 
-  private feeds: RssFeedConfig[];
+  private feeds: readonly RssFeedConfig[];
 
-  constructor(feeds = CURATED_TECH_FEEDS) {
+  constructor(feeds: readonly RssFeedConfig[] = CURATED_TECH_FEEDS) {
     this.feeds = feeds;
   }
 

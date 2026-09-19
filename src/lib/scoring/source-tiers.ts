@@ -6,9 +6,9 @@
  */
 
 import { SourceType } from '../db/types';
-import { ELEVATED_DOMAINS, HIGH_AUTHORITY_DOMAINS } from '../sources/curated-sources';
+import { ELEVATED_DOMAINS, HIGH_AUTHORITY_DOMAINS, SourceTierCode } from '../sources/curated-sources';
 
-export { ELEVATED_DOMAINS, HIGH_AUTHORITY_DOMAINS };
+export { ELEVATED_DOMAINS, HIGH_AUTHORITY_DOMAINS, type SourceTierCode };
 
 export enum SourceTier {
   T1_AUTHORITY = 'T1',
