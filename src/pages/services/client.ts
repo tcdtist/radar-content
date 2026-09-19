@@ -1,3 +1,4 @@
+import { MOCK_INTELLIGENCE_CARDS } from '../../lib/data/mock-cards';
 import { CardStatus, CardTranslation, ScoredIntelligenceCard } from '../../lib/db/types';
 import { getAuthToken, isAdmin } from './auth';
 
@@ -69,14 +70,24 @@ export async function fetchCards(filters: {
 
     const res = await fetch(`${API_BASE}/cards?${params.toString()}`, {
       headers: getAuthHeaders(),
-      signal: withTimeout(),
+      signal: withTimeout(8000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as { success: boolean; cards: ScoredIntelligenceCard[] };
     return data.success && Array.isArray(data.cards) ? data.cards : [];
   } catch (err) {
-    console.warn('[Radar Client] Failed to fetch live cards:', err);
-    return [];
+    console.warn('[Radar Client] Failed to fetch live cards, using mock fallback:', err);
+    let fallback = [...MOCK_INTELLIGENCE_CARDS];
+    if (filters.topic && filters.topic !== 'all') {
+      fallback = fallback.filter((c) =>
+        c.topic_tags.some((t) => t.toLowerCase() === filters.topic!.toLowerCase())
+      );
+    }
+    if (filters.status) {
+      const allowed = filters.status.split(',').map((s) => s.trim().toUpperCase());
+      fallback = fallback.filter((c) => allowed.includes(c.status));
+    }
+    return fallback;
   }
 }
 
