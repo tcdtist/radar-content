@@ -6,6 +6,9 @@
  */
 
 import { SourceType } from '../db/types';
+import { ELEVATED_DOMAINS, HIGH_AUTHORITY_DOMAINS } from '../sources/curated-sources';
+
+export { ELEVATED_DOMAINS, HIGH_AUTHORITY_DOMAINS };
 
 export enum SourceTier {
   T1_AUTHORITY = 'T1',
@@ -33,25 +36,6 @@ const SOURCE_TYPE_TIER: Record<SourceType, SourceTier> = {
   rss: SourceTier.T3_REFERENCE, // overridden per-feed by domain check
   reddit: SourceTier.T3_REFERENCE,
 };
-
-/** Engineering blog domains that elevate RSS from T3 → T1 or T2 */
-export const HIGH_AUTHORITY_DOMAINS: string[] = [
-  'anthropic.com',
-  'openai.com',
-  'simonwillison.net',
-  'blog.cloudflare.com',
-  'deepseek.com',
-  'research.google',
-  'ai.meta.com',
-];
-
-const ELEVATED_DOMAINS: string[] = [
-  'vercel.com',
-  'supabase.com',
-  'huggingface.co',
-  'github.com', // GitHub Releases Atom
-  'pytorch.org',
-];
 
 /** Extract hostname from URL for domain matching */
 function extractDomain(url: string): string {

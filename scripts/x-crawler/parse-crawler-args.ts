@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { INNER_CIRCLE_X_SEEDS } from '../../src/lib/sources/curated-sources';
 import { parseSeedUsers } from './filter-roster';
 import { CrawlerOptions } from './types';
 
@@ -25,8 +26,8 @@ export function loadEnvFile(filePath: string): void {
         }
       }
     }
-  } catch (err) {
-    console.warn(`Could not read env file ${filePath}:`, err);
+  } catch {
+    // Non-fatal if config fails to load
   }
 }
 
@@ -38,21 +39,7 @@ export function parseCrawlerArgs(argv = process.argv.slice(2)): CrawlerOptions {
   loadEnvFile(path.resolve(process.cwd(), '.env'));
 
   const envSeeds = process.env.SEED_USERS || process.env.X_SEED_USERS || process.env.SEED_USER;
-  const initialSeeds = envSeeds
-    ? parseSeedUsers(envSeeds)
-    : [
-        'goon_nguyen',
-        'karpathy',
-        'swyx',
-        'simonw',
-        'tdinh_me',
-        'altryne',
-        '_can1357',
-        '_mohansolo',
-        'alexalbert__',
-        'jarredsumner',
-        'rauchg',
-      ];
+  const initialSeeds = envSeeds ? parseSeedUsers(envSeeds) : [...INNER_CIRCLE_X_SEEDS];
 
   const options: CrawlerOptions = {
     seedUsers: initialSeeds,
