@@ -2,6 +2,7 @@ import { SourceType } from '../db/types';
 
 export interface ScoreComponents {
   sourceDiversity: number; // 0 to 1
+  sourceAuthority: number; // 0 to 1 (identity-based weight)
   evidenceDensity: number; // 0 to 1
   engagementSignal: number; // 0 to 1
   recencyBoost: number; // 0 to 1
@@ -10,6 +11,7 @@ export interface ScoreComponents {
 
 export interface ClusterScoringInput {
   sources: SourceType[];
+  sourceWeights?: number[]; // authority weights per source (0–1)
   evidenceCount: number;
   claimCount: number;
   totalEngagement: number;
@@ -18,6 +20,7 @@ export interface ClusterScoringInput {
 
 export interface ScoringEngineConfig {
   weightDiversity?: number;
+  weightAuthority?: number;
   weightEvidence?: number;
   weightEngagement?: number;
   weightRecency?: number;

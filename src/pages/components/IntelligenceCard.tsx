@@ -1,6 +1,7 @@
 import React from 'react';
 import { CardStatus, ScoredIntelligenceCard } from '../../lib/db/types';
 import { formatDateTime, formatRelativeTime } from '../utils/date-format';
+import { getHighestTierBadge } from '../utils/tier-badge';
 import { BaseButton } from './BaseButton';
 import { ArrowRightIcon, CheckIcon, ClockIcon, StarIcon, TrashIcon } from './Icons';
 
@@ -22,6 +23,8 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
         .filter(Boolean)
     )
   ).slice(0, 2);
+
+  const highestTier = getHighestTierBadge(card.sources);
 
   return (
     <div
@@ -49,19 +52,24 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
             ))}
           </div>
 
-          <div
-            className="font-mono"
-            style={{
-              padding: '0.2rem 0.55rem',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--bg-primary)',
-              border: '1px solid var(--accent-coral)',
-              color: 'var(--accent-coral)',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-            }}
-          >
-            SCORE {card.score}
+          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+            <span className={`badge ${highestTier.className}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+              {highestTier.emoji} {highestTier.label}
+            </span>
+            <div
+              className="font-mono"
+              style={{
+                padding: '0.2rem 0.55rem',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--bg-primary)',
+                border: '1px solid var(--accent-coral)',
+                color: 'var(--accent-coral)',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+              }}
+            >
+              SCORE {card.score}
+            </div>
           </div>
         </div>
 

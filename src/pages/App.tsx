@@ -47,6 +47,8 @@ export const App: React.FC = () => {
   const {
     searchQuery,
     setSearchQuery,
+    activeTierFilter,
+    setActiveTierFilter,
     currentPage,
     setCurrentPage,
     pageSize,
@@ -140,6 +142,8 @@ export const App: React.FC = () => {
         onSelectSort={setActiveSort}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        activeTierFilter={activeTierFilter}
+        onTierFilterChange={setActiveTierFilter}
       />
 
       <main>

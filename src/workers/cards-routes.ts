@@ -128,39 +128,43 @@ cardsApp.post('/:id/translate', requireAdmin, async (c) => {
   const clusterId = makeClusterId(id);
 
   try {
-    // 1. Check D1 cache first (bypass if force=true or if cached data is hollow/dummy)
     const force = c.req.query('force') === 'true';
+    const body = await c.req.json<{ card?: CardToTranslate }>().catch(() => ({ card: undefined }));
+    let card = body?.card;
+
+    if (!card?.summary) {
+      const dbCard = await queryCardById(c.env.DB, clusterId);
+      if (dbCard) {
+        card = {
+          label: dbCard.label,
+          summary: dbCard.summary,
+          evidence: dbCard.evidence,
+          counter: dbCard.counter,
+          context: dbCard.context,
+          verification_questions: dbCard.verification_questions,
+        };
+      }
+    }
+
     if (!force) {
       const cached = await getCardTranslation(c.env.DB, clusterId, 'vi');
       const isCorrupt = cached && (!cached.summary || cached.summary === 'Bản tóm tắt thử nghiệm' || (!cached.evidence?.length && !cached.counter?.length));
-      if (cached && !isCorrupt) {
+      const isTruncated = Boolean(
+        cached && card && (
+          (card.evidence && cached.evidence && card.evidence.length > cached.evidence.length) ||
+          (card.counter && cached.counter && card.counter.length > cached.counter.length)
+        )
+      );
+      if (cached && !isCorrupt && !isTruncated) {
         return c.json({ success: true, translation: cached, isCached: true });
       }
     }
 
-    // 2. Extract card data (from request body if provided, otherwise query D1 / mock)
-    const body = await c.req.json<{ card?: CardToTranslate }>().catch(() => ({ card: undefined }));
-    let cardToTranslate: CardToTranslate | undefined = body?.card;
-
-    if (!cardToTranslate || !cardToTranslate.summary) {
-      const dbCard = await queryCardById(c.env.DB, clusterId);
-      if (!dbCard) {
-        return c.json({ success: false, error: 'Card not found for translation' }, 404);
-      }
-      cardToTranslate = {
-        label: dbCard.label,
-        summary: dbCard.summary,
-        evidence: dbCard.evidence,
-        counter: dbCard.counter,
-        context: dbCard.context,
-        verification_questions: dbCard.verification_questions,
-      };
+    if (!card?.summary) {
+      return c.json({ success: false, error: 'Card not found for translation' }, 404);
     }
 
-    // 3. Translate via Gemini with resilient Workers AI fallback
-    const translated = await executeCardTranslation(c.env, cardToTranslate);
-
-    // 4. Save to D1 cache
+    const translated = await executeCardTranslation(c.env, card);
     const translationRecord: CardTranslation = {
       card_id: clusterId,
       lang: 'vi',
@@ -173,12 +177,7 @@ cardsApp.post('/:id/translate', requireAdmin, async (c) => {
     };
 
     await saveCardTranslation(c.env.DB, translationRecord);
-
-    return c.json({
-      success: true,
-      translation: translationRecord,
-      isCached: false,
-    });
+    return c.json({ success: true, translation: translationRecord, isCached: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ success: false, error: message }, 500);

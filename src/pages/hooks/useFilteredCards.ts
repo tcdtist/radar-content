@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ScoredIntelligenceCard } from '../../lib/db/types';
+import { getSourceTier, SourceTier } from '../../lib/scoring/source-tiers';
 
 // Rolling 30-day cutoff for active signals (SAVED and WRITTEN cards are immune)
 const ROLLING_WINDOW_SECONDS = 30 * 86400;
@@ -9,17 +10,14 @@ interface UseFilteredCardsParams {
 }
 
 export function useFilteredCards({ cards }: UseFilteredCardsParams) {
-  const [activeTopic, setActiveTopic] = useState('all');
-  const [activeStatus, setActiveStatus] = useState('READY,LEAD');
-  const [activeSort, setActiveSort] = useState('score');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTierFilter, setActiveTierFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(6);
 
   const resetFilters = () => {
-    setActiveTopic('all');
-    setActiveStatus('READY,LEAD');
     setSearchQuery('');
+    setActiveTierFilter('all');
     setCurrentPage(1);
   };
 
@@ -45,8 +43,19 @@ export function useFilteredCards({ cards }: UseFilteredCardsParams) {
       );
     }
 
+    // Tier filter: check if card has ≥ 1 source matching selected tier(s)
+    if (activeTierFilter !== 'all') {
+      const allowedTiers: SourceTier[] =
+        activeTierFilter === 'T1'
+          ? [SourceTier.T1_AUTHORITY]
+          : [SourceTier.T1_AUTHORITY, SourceTier.T2_DEPTH];
+      result = result.filter((c) =>
+        c.sources?.some((s) => allowedTiers.includes(getSourceTier(s.source, s.url).tier))
+      );
+    }
+
     return result;
-  }, [cards, searchQuery]);
+  }, [cards, searchQuery, activeTierFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
 
@@ -56,14 +65,10 @@ export function useFilteredCards({ cards }: UseFilteredCardsParams) {
   }, [filteredCards, currentPage, pageSize]);
 
   return {
-    activeTopic,
-    setActiveTopic,
-    activeStatus,
-    setActiveStatus,
-    activeSort,
-    setActiveSort,
     searchQuery,
     setSearchQuery,
+    activeTierFilter,
+    setActiveTierFilter,
     currentPage,
     setCurrentPage,
     pageSize,
