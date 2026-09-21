@@ -12,7 +12,7 @@
   <a href="https://github.com/tcdtist/radar-content/actions"><img src="https://img.shields.io/badge/CI-Passing-2ea44f?style=flat-square" alt="CI Status" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square" alt="TypeScript Strict" /></a>
   <a href="https://workers.cloudflare.com/"><img src="https://img.shields.io/badge/Cloudflare-Workers%20%26%20D1-f38020?style=flat-square" alt="Cloudflare" /></a>
-  <a href="https://vitest.dev/"><img src="https://img.shields.io/badge/Tests-165%20Passed-6e9f18?style=flat-square" alt="Vitest" /></a>
+  <a href="https://vitest.dev/"><img src="https://img.shields.io/badge/Tests-186%20Passed-6e9f18?style=flat-square" alt="Vitest" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/Infra%20Cost-%240%20%2F%20mo-brightgreen?style=flat-square" alt="Zero Cost" />
 </p>
@@ -205,7 +205,6 @@ radar-content/
 │   ├── lib/              # Core domain logic modules (db, sources, llm, graph, scoring)
 │   └── pages/            # Frontend dashboard application (React SPA)
 ├── tests/                # Vitest unit, integration, and E2E browser test suites
-├── docs/                 # System architecture specifications and deployment guides
 ├── scripts/              # Ingestion automation and verification tools
 ├── .github/              # GitHub Actions CI/CD workflows and automated AI reviews
 ├── wrangler.toml         # Cloudflare Workers, D1 database, and cron bindings
