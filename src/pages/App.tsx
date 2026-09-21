@@ -19,45 +19,48 @@ import { useUrlNavigation } from './hooks/useUrlNavigation';
 export const App: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const [selectedCard, setSelectedCard] = useState<ScoredIntelligenceCard | null>(null);
-  const { cardId: urlCardId, activeTab: urlActiveTab, openCard, changeTab, closeCard } = useUrlNavigation();
+  const {
+    cardId: urlCardId,
+    activeTab: urlActiveTab,
+    currentPage: urlPage,
+    changePage,
+    pageSize: urlPageSize,
+    changePageSize,
+    topic: activeTopic,
+    changeTopic,
+    status: activeStatus,
+    changeStatus,
+    sort: activeSort,
+    changeSort,
+    searchQuery: urlSearchQuery,
+    changeSearch,
+    resetUrlFilters,
+    openCard,
+    changeTab,
+    closeCard,
+  } = useUrlNavigation();
 
   const { isAdmin, loginWithGoogle, logout } = useAuth();
 
-  const [activeTopic, setActiveTopic] = useState('all');
-  const [activeStatus, setActiveStatus] = useState('READY,LEAD');
-  const [activeSort, setActiveSort] = useState('score');
+  const {
+    stats, cards, isLoading, isCrawling, isProcessing, isSyncing,
+    handleAction: baseHandleAction, handleSyncCrawl, handleSyncProcess,
+  } = useIntelligenceFeed({ topic: activeTopic, status: activeStatus, sort: activeSort, isAdmin });
 
   const {
-    stats,
+    searchQuery, setSearchQuery, activeTierFilter, setActiveTierFilter,
+    currentPage, setCurrentPage, pageSize, setPageSize, resetFilters,
+    filteredCards, paginatedCards, totalPages,
+  } = useFilteredCards({
     cards,
+    currentPage: urlPage,
+    onPageChange: changePage,
+    pageSize: urlPageSize,
+    onPageSizeChange: changePageSize,
+    searchQuery: urlSearchQuery,
+    onSearchChange: changeSearch,
     isLoading,
-    isCrawling,
-    isProcessing,
-    isSyncing,
-    handleAction: baseHandleAction,
-    handleSyncCrawl,
-    handleSyncProcess,
-  } = useIntelligenceFeed({
-    topic: activeTopic,
-    status: activeStatus,
-    sort: activeSort,
-    isAdmin,
   });
-
-  const {
-    searchQuery,
-    setSearchQuery,
-    activeTierFilter,
-    setActiveTierFilter,
-    currentPage,
-    setCurrentPage,
-    pageSize,
-    setPageSize,
-    resetFilters,
-    filteredCards,
-    paginatedCards,
-    totalPages,
-  } = useFilteredCards({ cards });
 
   useMobileScrollPersistence(!isLoading && cards.length > 0);
 
@@ -81,11 +84,8 @@ export const App: React.FC = () => {
 
   const triggerGoogleSignIn = () => {
     const btn = document.getElementById('btn-google-login');
-    if (btn) {
-      btn.click();
-    } else if (window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
-    }
+    if (btn) btn.click();
+    else if (window.google?.accounts?.id) window.google.accounts.id.prompt();
   };
 
   const handleProtectedAction = (action: () => void) => {
@@ -94,10 +94,7 @@ export const App: React.FC = () => {
   };
 
   const handleAction = async (id: string, action: CardStatus) => {
-    if (!isAdmin) {
-      triggerGoogleSignIn();
-      return;
-    }
+    if (!isAdmin) return triggerGoogleSignIn();
     if (selectedCard && selectedCard.id === id) {
       setSelectedCard((prev) => (prev ? { ...prev, status: action } : null));
     }
@@ -105,9 +102,7 @@ export const App: React.FC = () => {
   };
 
   const handleResetFilters = () => {
-    setActiveTopic('all');
-    setActiveStatus('READY,LEAD');
-    setActiveSort('score');
+    resetUrlFilters();
     resetFilters();
   };
 
@@ -135,11 +130,11 @@ export const App: React.FC = () => {
 
       <FilterBar
         activeTopic={activeTopic}
-        onSelectTopic={setActiveTopic}
+        onSelectTopic={changeTopic}
         activeStatus={activeStatus}
-        onSelectStatus={setActiveStatus}
+        onSelectStatus={changeStatus}
         activeSort={activeSort}
-        onSelectSort={setActiveSort}
+        onSelectSort={changeSort}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         activeTierFilter={activeTierFilter}
@@ -190,4 +185,3 @@ export const App: React.FC = () => {
     </div>
   );
 };
-

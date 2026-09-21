@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScoredIntelligenceCard } from '../../lib/db/types';
 import { getSourceTier, SourceTier } from '../../lib/scoring/source-tiers';
 
@@ -7,18 +7,76 @@ const ROLLING_WINDOW_SECONDS = 30 * 86400;
 
 interface UseFilteredCardsParams {
   cards: ScoredIntelligenceCard[];
+  initialPage?: number;
+  currentPage?: number;
+  onPageChange?: (page: number, replace?: boolean) => void;
+  pageSize?: number;
+  onPageSizeChange?: (size: number) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  isLoading?: boolean;
 }
 
-export function useFilteredCards({ cards }: UseFilteredCardsParams) {
-  const [searchQuery, setSearchQuery] = useState('');
+export function useFilteredCards({
+  cards,
+  initialPage = 1,
+  currentPage: externalPage,
+  onPageChange,
+  pageSize: externalPageSize,
+  onPageSizeChange,
+  searchQuery: externalSearchQuery,
+  onSearchChange,
+  isLoading = false,
+}: UseFilteredCardsParams) {
+  const [internalSearchQuery, setInternalSearchQuery] = useState('');
   const [activeTierFilter, setActiveTierFilter] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(6);
+  const [internalPage, setInternalPage] = useState(initialPage);
+  const [internalPageSize, setInternalPageSize] = useState(6);
+
+  const currentPage = externalPage ?? internalPage;
+  const pageSize = externalPageSize ?? internalPageSize;
+  const setPageSize = onPageSizeChange ?? setInternalPageSize;
+  const searchQuery = externalSearchQuery ?? internalSearchQuery;
+
+  const setPage = useCallback(
+    (page: number, replace = false) => {
+      if (onPageChange) {
+        onPageChange(page, replace);
+      } else {
+        setInternalPage(page);
+      }
+    },
+    [onPageChange]
+  );
+
+  const handleSearchChange = useCallback(
+    (query: string) => {
+      if (onSearchChange) {
+        onSearchChange(query);
+      } else {
+        setInternalSearchQuery(query);
+        setPage(1, true);
+      }
+    },
+    [onSearchChange, setPage]
+  );
+
+  const handleTierFilterChange = useCallback(
+    (tier: string) => {
+      setActiveTierFilter(tier);
+      setPage(1, true);
+    },
+    [setPage]
+  );
 
   const resetFilters = () => {
-    setSearchQuery('');
+    if (onSearchChange) {
+      onSearchChange('');
+    } else {
+      setInternalSearchQuery('');
+    }
     setActiveTierFilter('all');
-    setCurrentPage(1);
+    setPage(1, true);
   };
 
   const filteredCards = useMemo(() => {
@@ -59,18 +117,25 @@ export function useFilteredCards({ cards }: UseFilteredCardsParams) {
 
   const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
 
+  useEffect(() => {
+    if (!isLoading && currentPage > totalPages && filteredCards.length > 0) {
+      setPage(totalPages, true);
+    }
+  }, [currentPage, totalPages, filteredCards.length, isLoading, setPage]);
+
   const paginatedCards = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
+    const safePage = Math.min(currentPage, totalPages);
+    const startIndex = (safePage - 1) * pageSize;
     return filteredCards.slice(startIndex, startIndex + pageSize);
-  }, [filteredCards, currentPage, pageSize]);
+  }, [filteredCards, currentPage, totalPages, pageSize]);
 
   return {
     searchQuery,
-    setSearchQuery,
+    setSearchQuery: handleSearchChange,
     activeTierFilter,
-    setActiveTierFilter,
+    setActiveTierFilter: handleTierFilterChange,
     currentPage,
-    setCurrentPage,
+    setCurrentPage: setPage,
     pageSize,
     setPageSize,
     resetFilters,
