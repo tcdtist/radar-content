@@ -128,7 +128,7 @@ export async function triggerCrawl(): Promise<boolean> {
     const res = await fetch(`${API_BASE}/crawl/trigger`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      signal: withTimeout(8000),
+      signal: withTimeout(60000), // Crawl fetches 4 sources — needs up to 60s
     });
     const data = (await res.json()) as { success: boolean };
     return Boolean(data.success);
@@ -143,7 +143,7 @@ export async function triggerProcess(): Promise<boolean> {
     const res = await fetch(`${API_BASE}/process/trigger`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      signal: withTimeout(8000),
+      signal: withTimeout(60000), // Gemini LLM processing — needs up to 60s
     });
     const data = (await res.json()) as { success: boolean };
     return Boolean(data.success);

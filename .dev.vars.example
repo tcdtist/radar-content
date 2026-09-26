@@ -29,3 +29,7 @@ SEED_USERS=goon_nguyen,karpathy,swyx,simonw,tdinh_me,altryne,_can1357,_mohansolo
 # ADMIN_SECRET=your_admin_secret_password_here
 # JWT_SECRET=your_random_jwt_secret_key_here
 # GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
+
+# Dedicated Secret Ingest API Key for external harvesters (/api/ingest, /api/ingest/check)
+# INGEST_API_KEY=your_ingest_secret_key_here
+

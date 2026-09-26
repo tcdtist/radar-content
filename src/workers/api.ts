@@ -5,10 +5,12 @@ import { getDashboardStats } from '../lib/db/cluster-queries';
 import { CrawlerRegistry } from '../lib/sources/crawler-registry';
 import { getActiveSlotsForFrequency, getLocalHour, shouldExecuteCrawl } from '../lib/sources/schedule-manager';
 import { executeScheduledCrawl, processArticlePipeline, QueueMessageBody, WorkerEnv } from './pipeline';
-import { handleIngestPosts, IngestRequestPayload } from './ingest-handler';
+import { handleCheckExistingUrls, handleIngestPosts, IngestRequestPayload } from './ingest-handler';
+import { requireIngestAuth } from './ingest-auth';
 import { authApp, requireAdmin } from './auth-routes';
 import { adminApp } from './admin-routes';
 import { cardsApp } from './cards-routes';
+import { triggerCreatorRadarScan } from './creator-radar-trigger';
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
 
@@ -48,8 +50,8 @@ app.post('/api/crawl/trigger', requireAdmin, async (c) => {
   return c.json({ success: true, summary });
 });
 
-// External / local crawler ingestion endpoint
-app.post('/api/ingest', async (c) => {
+// External / local crawler ingestion endpoint - Requires Ingest API Key or Admin
+app.post('/api/ingest', requireIngestAuth, async (c) => {
   try {
     const payload = await c.req.json<IngestRequestPayload>();
     const res = await handleIngestPosts(c.env, payload);
@@ -60,17 +62,45 @@ app.post('/api/ingest', async (c) => {
   }
 });
 
-// Manual trigger for processing batch of articles - Requires Admin
-app.post('/api/process/trigger', requireAdmin, async (c) => {
-  const pending = await getUnprocessedArticles(c.env.DB, 5);
-  let processedCount = 0;
+// Check if URLs already exist in D1 (read-only deduplication check) - Requires Ingest API Key or Admin
+app.post('/api/ingest/check', requireIngestAuth, async (c) => {
+  try {
+    const { urls } = await c.req.json<{ urls: string[] }>();
+    const existingUrls = await handleCheckExistingUrls(c.env, urls || []);
+    return c.json({ success: true, existingUrls });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: message }, 400);
+  }
+});
 
-  for (const art of pending) {
-    const ok = await processArticlePipeline(c.env, art.id, art.title, art.body, art.source);
-    if (ok) processedCount++;
+// Manual trigger for processing batch of articles - Requires Admin
+// Uses async Queue to avoid HTTP timeout — Gemini LLM calls take 10-15s per article.
+app.post('/api/process/trigger', requireAdmin, async (c) => {
+  const pending = await getUnprocessedArticles(c.env.DB, 10);
+
+  if (pending.length === 0) {
+    return c.json({ success: true, totalPending: 0, queued: 0, message: 'No unprocessed articles found.' });
   }
 
-  return c.json({ success: true, totalPending: pending.length, processedCount });
+  // Preferred path: enqueue to ARTICLE_QUEUE → Queue consumer handles Gemini async
+  if (c.env.ARTICLE_QUEUE) {
+    let queued = 0;
+    for (const art of pending) {
+      try {
+        await c.env.ARTICLE_QUEUE.send({ articleId: art.id, title: art.title, body: art.body, source: art.source });
+        queued++;
+      } catch (err) {
+        console.error(`[Process Trigger] Failed to enqueue article ${art.id}:`, err);
+      }
+    }
+    return c.json({ success: true, totalPending: pending.length, queued, message: `Enqueued ${queued} articles for async Gemini processing.` });
+  }
+
+  // Fallback: process 1 article synchronously (no queue available)
+  const art = pending[0];
+  const ok = await processArticlePipeline(c.env, art.id, art.title, art.body, art.source);
+  return c.json({ success: ok, totalPending: pending.length, processedCount: ok ? 1 : 0, message: 'Queue unavailable — processed 1 article synchronously.' });
 });
 
 // Crawl schedule status endpoint
@@ -96,11 +126,21 @@ app.get('/api/schedule', (c) => {
   });
 });
 
+// Manual / external trigger for Creator Radar scan via GitHub Actions
+app.post('/api/creator-radar/trigger', async (c) => {
+  const result = await triggerCreatorRadarScan(c.env);
+  return c.json(result, result.success ? 200 : (result.status as any));
+});
+
 export default {
   fetch: app.fetch,
 
   // Cron trigger handler with configurable frequency gating
   async scheduled(controller: ScheduledController, env: WorkerEnv, _ctx: ExecutionContext): Promise<void> {
+    // 1. Trigger Creator Radar scan on GitHub Actions at scheduled slots (00:01, 06:01, 12:01, 18:01 UTC+7)
+    await triggerCreatorRadarScan(env);
+
+    // 2. Frequency-gated crawl for radar-content articles
     const decision = shouldExecuteCrawl(env.CRAWL_FREQUENCY, controller.scheduledTime, env.TIMEZONE);
     console.log(`[Worker Scheduler] ${decision.reason}`);
 

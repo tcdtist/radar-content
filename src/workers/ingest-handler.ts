@@ -14,8 +14,33 @@ export interface IngestResponse {
   duplicateCount: number;
   insertedCount: number;
   insertedArticleIds: ArticleId[];
+  insertedUrls: string[];
   processedCount: number;
   errors: string[];
+}
+
+/**
+ * Check a list of URLs against D1 in batch and return those that already exist.
+ */
+export async function handleCheckExistingUrls(
+  env: WorkerEnv,
+  urls: string[]
+): Promise<string[]> {
+  if (!Array.isArray(urls) || urls.length === 0) return [];
+  const existing: string[] = [];
+  const batchSize = 50;
+
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const chunk = urls.slice(i, i + batchSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const stmt = env.DB.prepare(`SELECT url FROM articles WHERE url IN (${placeholders})`);
+    const { results } = await stmt.bind(...chunk).all<{ url: string }>();
+    if (results) {
+      existing.push(...results.map((r) => r.url));
+    }
+  }
+
+  return existing;
 }
 
 /**
@@ -31,6 +56,7 @@ export async function handleIngestPosts(
     duplicateCount: 0,
     insertedCount: 0,
     insertedArticleIds: [],
+    insertedUrls: [],
     processedCount: 0,
     errors: [],
   };
@@ -43,6 +69,14 @@ export async function handleIngestPosts(
     try {
       if (!post.url || !post.title || !post.source) {
         result.errors.push('Invalid post structure: missing url, title, or source');
+        continue;
+      }
+
+      const ALLOWED_MACRO_SOURCES = new Set(['x', 'hn', 'lobsters', 'rss', 'reddit']);
+      if (!ALLOWED_MACRO_SOURCES.has(post.source)) {
+        result.errors.push(
+          `Disallowed source "${post.source}". Radar Content only ingests macro sources (x, hn, lobsters, rss, reddit).`
+        );
         continue;
       }
 
@@ -68,6 +102,7 @@ export async function handleIngestPosts(
       }
 
       result.insertedArticleIds.push(articleId);
+      result.insertedUrls.push(post.url);
       result.insertedCount++;
 
       if (env.ARTICLE_QUEUE) {

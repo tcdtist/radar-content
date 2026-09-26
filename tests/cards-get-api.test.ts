@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MOCK_INTELLIGENCE_CARDS } from '../src/lib/data/mock-cards';
 import worker from '../src/workers/api';
 import { WorkerEnv } from '../src/workers/pipeline';
 
@@ -55,13 +56,15 @@ describe('Cards Detail Query API (GET /api/cards/:id)', () => {
   });
 
   it('falls back to mock snapshot card if not found in D1', async () => {
-    const req = new Request('http://localhost/api/cards/cluster_comm_22', { method: 'GET' });
+    const fallbackCard = MOCK_INTELLIGENCE_CARDS[0];
+    expect(fallbackCard).toBeDefined();
+    const req = new Request(`http://localhost/api/cards/${fallbackCard.id}`, { method: 'GET' });
     const res = await worker.fetch(req, testEnv, mockCtx);
 
     expect(res.status).toBe(200);
     const data = (await res.json()) as { success: boolean; card?: { id: string } };
     expect(data.success).toBe(true);
-    expect(data.card?.id).toBe('cluster_comm_22');
+    expect(data.card?.id).toBe(fallbackCard.id);
   });
 
   it('returns 404 if card is not found anywhere', async () => {

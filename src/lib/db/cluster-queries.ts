@@ -28,18 +28,28 @@ export async function queryCards(
     : ['READY', 'LEAD'];
 
   const placeholders = statusList.map(() => '?').join(',');
-  let orderBy = 'score DESC';
-  if (filters.sort === 'newest') orderBy = 'updated_at DESC';
-  if (filters.sort === 'evidence') orderBy = 'article_count DESC';
+  let orderBy = 'c.score DESC';
+  if (filters.sort === 'newest') {
+    orderBy = `COALESCE(
+      (
+        SELECT MAX(COALESCE(a.published_at, a.crawled_at, 0))
+        FROM cluster_articles ca
+        JOIN articles a ON ca.article_id = a.id
+        WHERE ca.cluster_id = c.id
+      ),
+      c.created_at
+    ) DESC`;
+  }
+  if (filters.sort === 'evidence') orderBy = 'c.article_count DESC';
 
   const limit = filters.limit || 50;
   const page = Math.max(1, filters.page || 1);
   const offset = (page - 1) * limit;
 
   const clusterSql = `
-    SELECT id, label, topic_tags, score, status, article_count, source_count, created_at, updated_at
-    FROM clusters
-    WHERE status IN (${placeholders})
+    SELECT c.id, c.label, c.topic_tags, c.score, c.status, c.article_count, c.source_count, c.created_at, c.updated_at
+    FROM clusters c
+    WHERE c.status IN (${placeholders})
     ORDER BY ${orderBy}
     LIMIT ? OFFSET ?
   `;
