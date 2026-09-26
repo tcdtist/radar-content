@@ -83,18 +83,23 @@ app.post('/api/process/trigger', requireAdmin, async (c) => {
     return c.json({ success: true, totalPending: 0, queued: 0, message: 'No unprocessed articles found.' });
   }
 
-  // Preferred path: enqueue to ARTICLE_QUEUE → Queue consumer handles Gemini async
+  // Preferred path: enqueue to ARTICLE_QUEUE in batch → Queue consumer handles Gemini async
   if (c.env.ARTICLE_QUEUE) {
-    let queued = 0;
-    for (const art of pending) {
-      try {
-        await c.env.ARTICLE_QUEUE.send({ articleId: art.id, title: art.title, body: art.body, source: art.source });
-        queued++;
-      } catch (err) {
-        console.error(`[Process Trigger] Failed to enqueue article ${art.id}:`, err);
-      }
+    const messages = pending.map((art) => ({
+      body: { articleId: art.id, title: art.title, body: art.body, source: art.source },
+    }));
+    try {
+      await c.env.ARTICLE_QUEUE.sendBatch(messages);
+      return c.json({
+        success: true,
+        totalPending: pending.length,
+        queued: pending.length,
+        message: `Enqueued ${pending.length} articles in batch for async Gemini processing.`,
+      });
+    } catch (err) {
+      console.error('[Process Trigger] Failed to sendBatch articles to queue:', err);
+      return c.json({ success: false, error: 'Failed to enqueue articles' }, 500);
     }
-    return c.json({ success: true, totalPending: pending.length, queued, message: `Enqueued ${queued} articles for async Gemini processing.` });
   }
 
   // Fallback: process 1 article synchronously (no queue available)
@@ -126,8 +131,8 @@ app.get('/api/schedule', (c) => {
   });
 });
 
-// Manual / external trigger for Creator Radar scan via GitHub Actions
-app.post('/api/creator-radar/trigger', async (c) => {
+// Manual / external trigger for Creator Radar scan via GitHub Actions - Requires Admin
+app.post('/api/creator-radar/trigger', requireAdmin, async (c) => {
   const result = await triggerCreatorRadarScan(c.env);
   return c.json(result, result.success ? 200 : (result.status as any));
 });
@@ -137,8 +142,13 @@ export default {
 
   // Cron trigger handler with configurable frequency gating
   async scheduled(controller: ScheduledController, env: WorkerEnv, _ctx: ExecutionContext): Promise<void> {
-    // 1. Trigger Creator Radar scan on GitHub Actions at scheduled slots (00:01, 06:01, 12:01, 18:01 UTC+7)
-    await triggerCreatorRadarScan(env);
+    const tz = env.TIMEZONE || 'Asia/Ho_Chi_Minh';
+    const localHour = getLocalHour(controller.scheduledTime, tz);
+
+    // 1. Trigger Creator Radar scan on GitHub Actions only at scheduled slots (00:01, 06:01, 12:01, 18:01 UTC+7)
+    if ([0, 6, 12, 18].includes(localHour)) {
+      await triggerCreatorRadarScan(env);
+    }
 
     // 2. Frequency-gated crawl for radar-content articles
     const decision = shouldExecuteCrawl(env.CRAWL_FREQUENCY, controller.scheduledTime, env.TIMEZONE);

@@ -46,6 +46,8 @@ export async function handleCheckExistingUrls(
 /**
  * Ingest an external array of raw source posts into D1 and optionally enqueue/process.
  */
+const ALLOWED_MACRO_SOURCES = new Set(['x', 'hn', 'lobsters', 'rss', 'reddit']);
+
 export async function handleIngestPosts(
   env: WorkerEnv,
   payload: IngestRequestPayload
@@ -72,7 +74,6 @@ export async function handleIngestPosts(
         continue;
       }
 
-      const ALLOWED_MACRO_SOURCES = new Set(['x', 'hn', 'lobsters', 'rss', 'reddit']);
       if (!ALLOWED_MACRO_SOURCES.has(post.source)) {
         result.errors.push(
           `Disallowed source "${post.source}". Radar Content only ingests macro sources (x, hn, lobsters, rss, reddit).`
