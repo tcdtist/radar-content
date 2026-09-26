@@ -24,6 +24,7 @@ export interface WorkerEnv {
   GOOGLE_CLIENT_ID?: string;
   RADAR_GITHUB_TOKEN?: string;
   GITHUB_REPOSITORY?: string;
+  INGEST_API_KEY?: string;
 }
 
 export interface QueueMessageBody {

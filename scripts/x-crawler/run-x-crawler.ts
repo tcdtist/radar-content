@@ -106,9 +106,13 @@ async function main(): Promise<void> {
 
   console.log(`🚀 Sending payload to Radar Content API: ${opts.apiUrl}...`);
   try {
+    const ingestKey = process.env.INGEST_API_KEY || process.env.ADMIN_SECRET;
     const res = await fetch(opts.apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ingestKey ? { Authorization: `Bearer ${ingestKey}` } : {}),
+      },
       body: JSON.stringify({
         posts: postsToIngest,
         processNow: opts.processNow,

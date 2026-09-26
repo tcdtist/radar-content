@@ -113,6 +113,12 @@ describe('Worker Hono API Routes & Auth Protection', () => {
     expect(res.status).toBe(401);
   });
 
+  it('POST /api/creator-radar/trigger rejects unauthenticated requests with 401', async () => {
+    const req = new Request('http://localhost/api/creator-radar/trigger', { method: 'POST' });
+    const res = await worker.fetch(req, mockEnv, mockCtx);
+    expect(res.status).toBe(401);
+  });
+
   it('POST /api/auth/login succeeds for admin email and correct secret', async () => {
     const req = new Request('http://localhost/api/auth/login', {
       method: 'POST',
