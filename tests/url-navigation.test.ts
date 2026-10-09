@@ -16,10 +16,10 @@ describe('URL Navigation & Deep-Linking State Logic', () => {
         },
       },
       history: {
-        pushState: (_state: any, _title: string, url: string) => {
+        pushState: (_state: unknown, _title: string, url: string) => {
           currentUrl = url.startsWith('http') ? url : `http://localhost:3000${url}`;
         },
-        replaceState: (_state: any, _title: string, url: string) => {
+        replaceState: (_state: unknown, _title: string, url: string) => {
           currentUrl = url.startsWith('http') ? url : `http://localhost:3000${url}`;
         },
       },

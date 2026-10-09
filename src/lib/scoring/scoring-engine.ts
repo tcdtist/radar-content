@@ -59,7 +59,16 @@ export class ScoringEngine {
       this.weightEngagement * engagementSignal +
       this.weightRecency * recencyBoost;
 
-    const finalScore = Math.round(Math.min(100, Math.max(0, rawScore * 100)));
+    // Cluster age decay: Prevents month-old topics from permanently dominating the top of the feed.
+    // Topics within 3 days receive 100% score. Older topics decay smoothly with a half-life of 10 days.
+    const clusterCreatedAt = input.clusterCreatedAt ?? newestTime;
+    const clusterAgeHours = Math.max(0, (nowSeconds - clusterCreatedAt) / 3600);
+    const clusterAgeDays = clusterAgeHours / 24;
+    const ageDecayMultiplier = clusterAgeDays <= 3
+      ? 1.0
+      : Math.exp(-(clusterAgeDays - 3) / 10);
+
+    const finalScore = Math.round(Math.min(100, Math.max(0, rawScore * ageDecayMultiplier * 100)));
 
     return {
       sourceDiversity: Math.round(sourceDiversity * 100) / 100,

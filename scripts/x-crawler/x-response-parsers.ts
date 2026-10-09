@@ -1,121 +1,12 @@
-import { XComment, XTweet, XUser } from './types';
+import { XComment, XTweet } from './types';
+import { extractTweetText, unwrapTweetResult } from './tweet-unwrapper';
 
-/**
- * Parse UserByScreenName GraphQL response into XUser.
- */
-export function parseUserProfileResponse(
-  data: Record<string, unknown>,
-  screenName: string
-): XUser {
-  const result = (data as {
-    data?: {
-      user?: {
-        result?: {
-          rest_id?: string;
-          legacy?: {
-            name?: string;
-            description?: string;
-            followers_count?: number;
-            friends_count?: number;
-            statuses_count?: number;
-          };
-        };
-      };
-    };
-  })?.data?.user?.result;
-
-  const legacy = result?.legacy || {};
-
-  return {
-    id: result?.rest_id || `user_${screenName}`,
-    screenName,
-    name: legacy.name || screenName,
-    description: legacy.description || '',
-    followersCount: legacy.followers_count || 0,
-    followingCount: legacy.friends_count || 0,
-    statusesCount: legacy.statuses_count || 0,
-  };
-}
-
-/**
- * Parse Following list GraphQL response into XUser[].
- */
-export function parseFollowingResponse(data: Record<string, unknown>): XUser[] {
-  const instructions = (data as {
-    data?: {
-      user?: {
-        result?: {
-          timeline?: {
-            timeline?: {
-              instructions?: Array<{
-                type?: string;
-                entries?: Array<{
-                  content?: {
-                    itemContent?: {
-                      user_results?: {
-                        result?: {
-                          __typename?: string;
-                          rest_id?: string;
-                          core?: { name?: string; screen_name?: string };
-                          legacy?: {
-                            name?: string;
-                            screen_name?: string;
-                            description?: string;
-                            followers_count?: number;
-                            friends_count?: number;
-                            statuses_count?: number;
-                          };
-                          profile_bio?: { description?: string };
-                          relationship_counts?: { followers?: number; following?: number };
-                          tweet_counts?: { tweets?: number; statuses_count?: number };
-                        };
-                      };
-                    };
-                  };
-                }>;
-              }>;
-            };
-          };
-        };
-      };
-    };
-  })?.data?.user?.result?.timeline?.timeline?.instructions || [];
-
-  const users: XUser[] = [];
-
-  for (const inst of instructions) {
-    if (inst.type === 'TimelineAddEntries' && Array.isArray(inst.entries)) {
-      for (const entry of inst.entries) {
-        const res = entry.content?.itemContent?.user_results?.result;
-        if (res && res.__typename === 'User') {
-          const screenName = res.core?.screen_name || res.legacy?.screen_name;
-          const name = res.core?.name || res.legacy?.name || screenName;
-          const description = res.profile_bio?.description || res.legacy?.description || '';
-          const followers = res.relationship_counts?.followers || res.legacy?.followers_count || 0;
-          const following = res.relationship_counts?.following || res.legacy?.friends_count || 0;
-          const statuses = res.tweet_counts?.tweets || res.tweet_counts?.statuses_count || 100;
-
-          if (screenName) {
-            users.push({
-              id: res.rest_id || `user_${screenName}`,
-              screenName,
-              name: name || screenName,
-              description,
-              followersCount: followers,
-              followingCount: following,
-              statusesCount: statuses,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  return users;
-}
+export { parseFollowingResponse, parseUserProfileResponse } from './user-parsers';
+export { extractTweetText, unwrapTweetResult } from './tweet-unwrapper';
 
 /**
  * Parse UserTweets GraphQL response into XTweet[].
+ * Supports Note Tweets (longform posts) and unwrap of TweetWithVisibilityResults.
  */
 export function parseUserTweetsResponse(
   data: Record<string, unknown>,
@@ -134,17 +25,7 @@ export function parseUserTweetsResponse(
                   content?: {
                     itemContent?: {
                       tweet_results?: {
-                        result?: {
-                          legacy?: {
-                            id_str?: string;
-                            full_text?: string;
-                            created_at?: string;
-                            reply_count?: number;
-                            retweet_count?: number;
-                            favorite_count?: number;
-                            in_reply_to_status_id_str?: string | null;
-                          };
-                        };
+                        result?: unknown;
                       };
                     };
                   };
@@ -162,12 +43,15 @@ export function parseUserTweetsResponse(
   for (const inst of instructions) {
     if (inst.type === 'TimelineAddEntries' && Array.isArray(inst.entries)) {
       for (const entry of inst.entries) {
-        const tRes = entry.content?.itemContent?.tweet_results?.result;
+        const rawRes = entry.content?.itemContent?.tweet_results?.result;
+        const tRes = unwrapTweetResult(rawRes);
         const legacy = tRes?.legacy;
-        if (legacy?.full_text && legacy.id_str) {
+        const text = tRes ? extractTweetText(tRes) : '';
+
+        if (text && legacy?.id_str) {
           tweets.push({
             id: legacy.id_str,
-            text: legacy.full_text,
+            text,
             author: screenName,
             authorName,
             createdAt: legacy.created_at
@@ -190,6 +74,7 @@ export function parseUserTweetsResponse(
 
 /**
  * Parse TweetDetail response into XComment[].
+ * Supports Note Tweets (longform replies) and unwrap of TweetWithVisibilityResults.
  */
 export function parseTweetCommentsResponse(
   data: Record<string, unknown>,
@@ -207,22 +92,7 @@ export function parseTweetCommentsResponse(
                 item?: {
                   itemContent?: {
                     tweet_results?: {
-                      result?: {
-                        legacy?: {
-                          id_str?: string;
-                          full_text?: string;
-                          favorite_count?: number;
-                          created_at?: string;
-                        };
-                        core?: {
-                          user_results?: {
-                            result?: {
-                              core?: { name?: string; screen_name?: string };
-                              legacy?: { name?: string; screen_name?: string };
-                            };
-                          };
-                        };
-                      };
+                      result?: unknown;
                     };
                   };
                 };
@@ -241,16 +111,18 @@ export function parseTweetCommentsResponse(
       for (const entry of inst.entries) {
         if (entry.entryId?.includes('conversationthread') && Array.isArray(entry.content?.items)) {
           for (const itm of entry.content.items) {
-            const res = itm.item?.itemContent?.tweet_results?.result;
+            const rawRes = itm.item?.itemContent?.tweet_results?.result;
+            const res = unwrapTweetResult(rawRes);
             const legacy = res?.legacy;
+            const text = res ? extractTweetText(res) : '';
             const userRes = res?.core?.user_results?.result;
             const author = userRes?.core?.screen_name || userRes?.legacy?.screen_name;
             const authorName = userRes?.core?.name || userRes?.legacy?.name || author;
 
-            if (legacy?.full_text && author && legacy.id_str && legacy.id_str !== tweetId) {
+            if (text && author && legacy?.id_str && legacy.id_str !== tweetId) {
               comments.push({
                 id: legacy.id_str,
-                text: legacy.full_text,
+                text,
                 author,
                 authorName: authorName || author,
                 likeCount: legacy.favorite_count || 0,

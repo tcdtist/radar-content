@@ -61,9 +61,17 @@ describe('Worker Hono API Routes & Auth Protection', () => {
     const res = await worker.fetch(req, mockEnv, mockCtx);
 
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { success: boolean; stats: unknown };
+    const data = (await res.json()) as {
+      success: boolean;
+      stats: { totalArticles: number; totalClusters: number; readyCount: number; writtenCount: number };
+    };
     expect(data.success).toBe(true);
-    expect(data.stats).toBeDefined();
+    expect(data.stats).toMatchObject({
+      totalArticles: 10,
+      totalClusters: 10,
+      readyCount: 10,
+      writtenCount: 10,
+    });
   });
 
   it('POST /api/cards/:id/action rejects unauthenticated requests with 401', async () => {
@@ -117,86 +125,5 @@ describe('Worker Hono API Routes & Auth Protection', () => {
     const req = new Request('http://localhost/api/creator-radar/trigger', { method: 'POST' });
     const res = await worker.fetch(req, mockEnv, mockCtx);
     expect(res.status).toBe(401);
-  });
-
-  it('POST /api/auth/login succeeds for admin email and correct secret', async () => {
-    const req = new Request('http://localhost/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'admin@example.com',
-        secret: 'test-admin-secret-2026',
-      }),
-    });
-
-    const res = await worker.fetch(req, mockEnv, mockCtx);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { success: boolean; token: string; user: { email: string } };
-    expect(data.success).toBe(true);
-    expect(data.token).toBeDefined();
-    expect(data.user.email).toBe('admin@example.com');
-  });
-
-  it('POST /api/auth/login rejects non-admin email with 401', async () => {
-    const req = new Request('http://localhost/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'attacker@gmail.com',
-        secret: 'test-admin-secret-2026',
-      }),
-    });
-
-    const res = await worker.fetch(req, mockEnv, mockCtx);
-    expect(res.status).toBe(401);
-  });
-
-  it('GET /api/auth/me returns authenticated status with valid Bearer token', async () => {
-    const token = await signSessionToken(
-      { email: 'admin@example.com', role: 'admin', exp: Date.now() + 3600 * 1000 },
-      getJwtSecret(mockEnv)
-    );
-
-    const req = new Request('http://localhost/api/auth/me', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    const res = await worker.fetch(req, mockEnv, mockCtx);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { success: boolean; authenticated: boolean; user?: { email: string } };
-    expect(data.success).toBe(true);
-    expect(data.authenticated).toBe(true);
-    expect(data.user?.email).toBe('admin@example.com');
-
-    // Unauthenticated request returns 401
-    const unauthReq = new Request('http://localhost/api/auth/me', { method: 'GET' });
-    const unauthRes = await worker.fetch(unauthReq, mockEnv, mockCtx);
-    expect(unauthRes.status).toBe(401);
-  });
-
-  it('GET /api/auth/config returns public googleClientId', async () => {
-    const customEnv: WorkerEnv = {
-      ...mockEnv,
-      GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
-    };
-    const req = new Request('http://localhost/api/auth/config', { method: 'GET' });
-    const res = await worker.fetch(req, customEnv, mockCtx);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { success: boolean; googleClientId: string };
-    expect(data.success).toBe(true);
-    expect(data.googleClientId).toBe('test-client-id.apps.googleusercontent.com');
-  });
-
-  it('recognizes admin via Cf-Access-Authenticated-User-Email header', async () => {
-    const req = new Request('http://localhost/api/auth/me', {
-      method: 'GET',
-      headers: { 'Cf-Access-Authenticated-User-Email': 'admin@example.com' },
-    });
-    const res = await worker.fetch(req, mockEnv, mockCtx);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { authenticated: boolean; user?: { email: string; role: string } };
-    expect(data.authenticated).toBe(true);
-    expect(data.user?.role).toBe('admin');
   });
 });

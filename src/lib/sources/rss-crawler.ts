@@ -25,7 +25,7 @@ export class RssCrawler implements SourceCrawler {
 
     for (const feed of this.feeds) {
       try {
-        const posts = await this.fetchFeed(feed, limitPerFeed);
+        const posts = await this.fetchFeedWithFallback(feed, limitPerFeed);
         results.push(...posts);
       } catch (err) {
         console.error(`RssCrawler error for ${feed.name}:`, err);
@@ -33,6 +33,25 @@ export class RssCrawler implements SourceCrawler {
     }
 
     return results;
+  }
+
+  /**
+   * Try primary URL, then each fallback URL on failure (for RSSHub resilience).
+   */
+  async fetchFeedWithFallback(feed: RssFeedConfig, limit: number): Promise<RawSourcePost[]> {
+    const urls = [feed.url, ...(feed.fallbackUrls || [])];
+    let lastError: unknown;
+
+    for (const url of urls) {
+      try {
+        return await this.fetchFeed({ ...feed, url }, limit);
+      } catch (err) {
+        lastError = err;
+        console.warn(`RssCrawler fallback: ${url} failed, trying next...`);
+      }
+    }
+
+    throw lastError;
   }
 
   async fetchFeed(feed: RssFeedConfig, limit: number): Promise<RawSourcePost[]> {

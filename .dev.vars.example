@@ -33,3 +33,6 @@ SEED_USERS=goon_nguyen,karpathy,swyx,simonw,tdinh_me,altryne,_can1357,_mohansolo
 # Dedicated Secret Ingest API Key for external harvesters (/api/ingest, /api/ingest/check)
 # INGEST_API_KEY=your_ingest_secret_key_here
 
+# Discord Webhook URL for high-signal READY cluster alerts (optional, rate-limited)
+# DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_id/your_webhook_token
+

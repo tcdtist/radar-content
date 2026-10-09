@@ -1,4 +1,5 @@
 import { linkClusterArticle, upsertCluster } from '../db/cluster-queries';
+import { migrateTranslations } from '../db/translation-queries';
 import { CardStatus, makeArticleId, makeClusterId, SourceType } from '../db/types';
 import { ScoringEngine } from '../scoring/scoring-engine';
 import { getAuthorityWeight } from '../scoring/source-tiers';
@@ -8,6 +9,7 @@ import { LeidenAlgorithm } from './leiden-algorithm';
 export interface ClusteringRunSummary {
   communitiesDetected: number;
   clustersUpserted: number;
+  translationsMigrated: number;
 }
 
 export class ClusterBuilder {
@@ -19,10 +21,25 @@ export class ClusterBuilder {
     this.scorer = scorer;
   }
 
+  /**
+   * Derive a deterministic cluster ID from sorted entity member set.
+   * Same entities → same hash → stable cluster ID across pipeline runs.
+   */
+  private deriveStableClusterId(entityIds: string[]): string {
+    const sorted = [...entityIds].sort();
+    const key = sorted.join('|');
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+      const ch = key.charCodeAt(i);
+      hash = ((hash << 5) - hash + ch) | 0;
+    }
+    return `cluster_${Math.abs(hash).toString(36)}`;
+  }
+
   async buildClustersFromGraph(db: D1Database): Promise<ClusteringRunSummary> {
     const { nodes, edges } = await fetchGraph(db);
     if (nodes.length === 0) {
-      return { communitiesDetected: 0, clustersUpserted: 0 };
+      return { communitiesDetected: 0, clustersUpserted: 0, translationsMigrated: 0 };
     }
 
     const communityMap = this.leiden.detectCommunities(nodes, edges);
@@ -35,8 +52,9 @@ export class ClusterBuilder {
     }
 
     let clustersUpserted = 0;
+    let translationsMigrated = 0;
 
-    for (const [commId, entityIds] of communities.entries()) {
+    for (const [, entityIds] of communities.entries()) {
       if (entityIds.length === 0) continue;
 
       // Find top entity names for naming the cluster
@@ -51,9 +69,24 @@ export class ClusterBuilder {
         ? (topEntities.length === 1
             ? formatTitle(topEntities[0])
             : `${formatTitle(topEntities[0])} · ${topEntities.slice(1, 3).join(', ')}`)
-        : `Topic Group ${commId}`;
+        : `Topic Group`;
 
-      const clusterId = makeClusterId(`cluster_comm_${commId}`);
+      // Deterministic cluster ID from entity member set (stable across Leiden runs)
+      const stableId = this.deriveStableClusterId(entityIds);
+      const clusterId = makeClusterId(stableId);
+
+      // Check for legacy non-deterministic cluster with same label → migrate translation
+      const legacyRow = await db.prepare(
+        `SELECT id FROM clusters WHERE label = ? AND id != ? LIMIT 1`
+      ).bind(label, clusterId).first<{ id: string }>();
+
+      if (legacyRow) {
+        const migrated = await migrateTranslations(db, makeClusterId(legacyRow.id), clusterId);
+        if (migrated) translationsMigrated++;
+        // Clean up legacy cluster (articles will be re-linked to stable ID)
+        await db.prepare('DELETE FROM cluster_articles WHERE cluster_id = ?').bind(legacyRow.id).run();
+        await db.prepare('DELETE FROM clusters WHERE id = ?').bind(legacyRow.id).run();
+      }
 
       // Query articles linked to these entityIds
       const placeholders = entityIds.map(() => '?').join(',');
@@ -111,6 +144,11 @@ export class ClusterBuilder {
         }
       }
 
+      const existingCluster = await db.prepare(
+        'SELECT created_at FROM clusters WHERE id = ? LIMIT 1'
+      ).bind(clusterId).first<{ created_at: number }>();
+      const clusterCreatedAt = existingCluster?.created_at ?? Math.floor(Date.now() / 1000);
+
       const scoreInput = {
         sources,
         sourceWeights: articles.map((a) => getAuthorityWeight(a.source, a.url)),
@@ -118,6 +156,7 @@ export class ClusterBuilder {
         claimCount: Math.max(1, articles.length * 2),
         totalEngagement: articles.length * 120,
         publishedAtTimestamps: publishedTimes,
+        clusterCreatedAt,
       };
 
       const scoreComp = this.scorer.computeScore(scoreInput);
@@ -153,6 +192,7 @@ export class ClusterBuilder {
     return {
       communitiesDetected: communities.size,
       clustersUpserted,
+      translationsMigrated,
     };
   }
 }

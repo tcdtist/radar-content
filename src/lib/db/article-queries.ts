@@ -63,7 +63,7 @@ export async function getUnprocessedArticles(
     SELECT id, source, source_id, url, title, body, author, published_at, crawled_at, processed
     FROM articles
     WHERE processed = 0
-    ORDER BY crawled_at ASC
+    ORDER BY published_at DESC, crawled_at DESC
     LIMIT ?
   `);
 

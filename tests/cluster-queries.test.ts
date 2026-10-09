@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { queryCards } from '../src/lib/db/cluster-queries';
 
 describe('Cluster Queries (queryCards)', () => {
-  it('constructs correct SQL with correlated subquery for sort=newest', async () => {
+  it('constructs correct SQL for sort=newest by cluster emergence created_at', async () => {
     let capturedSql = '';
     let capturedParams: unknown[] = [];
 
@@ -25,13 +25,7 @@ describe('Cluster Queries (queryCards)', () => {
     expect(capturedSql).toContain('SELECT c.id, c.label, c.topic_tags, c.score, c.status, c.article_count, c.source_count, c.created_at, c.updated_at');
     expect(capturedSql).toContain('FROM clusters c');
     expect(capturedSql).toContain('WHERE c.status IN (?,?)');
-    expect(capturedSql).toContain('ORDER BY COALESCE(');
-    expect(capturedSql).toContain('SELECT MAX(COALESCE(a.published_at, a.crawled_at, 0))');
-    expect(capturedSql).toContain('FROM cluster_articles ca');
-    expect(capturedSql).toContain('JOIN articles a ON ca.article_id = a.id');
-    expect(capturedSql).toContain('WHERE ca.cluster_id = c.id');
-    expect(capturedSql).toContain('c.created_at');
-    expect(capturedSql).toContain('DESC');
+    expect(capturedSql).toContain('ORDER BY c.created_at DESC, c.updated_at DESC');
     expect(capturedParams).toEqual(['READY', 'LEAD', 25, 25]);
   });
 
@@ -88,8 +82,12 @@ describe('Cluster Queries (queryCards)', () => {
       },
     ];
 
+    let capturedArticleSql = '';
     const mockDb = {
       prepare: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('FROM cluster_articles')) {
+          capturedArticleSql = sql;
+        }
         return {
           bind: vi.fn().mockImplementation((..._params: unknown[]) => {
             return {
@@ -110,6 +108,8 @@ describe('Cluster Queries (queryCards)', () => {
 
     const cards = await queryCards(mockDb, { sort: 'newest' });
 
+    expect(capturedArticleSql).toContain('ORDER BY a.published_at DESC, a.crawled_at DESC');
+    expect(capturedArticleSql).toContain('LIMIT 10');
     expect(cards.length).toBe(1);
     const card = cards[0];
     expect(card.id).toBe('cluster_test_1');

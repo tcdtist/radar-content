@@ -42,6 +42,7 @@ export async function queryCardById(
        JOIN articles a ON ca.article_id = a.id
        LEFT JOIN extractions e ON a.id = e.article_id
        WHERE ca.cluster_id = ?
+       ORDER BY a.published_at DESC, a.crawled_at DESC
        LIMIT 10`
     )
     .bind(cardId)

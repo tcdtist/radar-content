@@ -13,5 +13,7 @@ export const STATUS_OPTIONS = [
 export const TIER_FILTER_OPTIONS = [
   { label: 'All', value: 'all' },
   { label: '🔥 T1', value: 'T1' },
-  { label: 'T1+T2', value: 'T1+T2' },
+  { label: '📊 T2', value: 'T2' },
+  { label: '📰 T3', value: 'T3' },
 ];
+

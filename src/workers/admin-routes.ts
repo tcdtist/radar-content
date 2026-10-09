@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { getLatestMockSnapshot, syncTop12MockCards } from '../lib/db/mock-snapshot-queries';
 import { pruneStaleData } from '../lib/db/prune-queries';
+import { notifyPromotedClusters } from '../lib/notifications/discord-notifier';
 import { requireAdmin } from './auth-routes';
 import { WorkerEnv } from './pipeline';
 
@@ -30,6 +31,23 @@ adminApp.post('/prune', async (c) => {
   try {
     const stats = await pruneStaleData(c.env.DB);
     return c.json({ success: true, stats });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: message }, 500);
+  }
+});
+
+/**
+ * Manually trigger high-signal Discord notification check
+ */
+adminApp.post('/notify-discord', async (c) => {
+  const webhookUrl = c.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return c.json({ success: false, error: 'DISCORD_WEBHOOK_URL is not configured' }, 400);
+  }
+  try {
+    const result = await notifyPromotedClusters(c.env.DB, webhookUrl);
+    return c.json({ success: true, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ success: false, error: message }, 500);

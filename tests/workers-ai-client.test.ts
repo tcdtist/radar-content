@@ -18,6 +18,7 @@ describe('WorkersAiClient', () => {
   });
 
   it('rotates to secondary model if primary model throws', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const mockAi = {
       run: vi
         .fn()
@@ -32,6 +33,8 @@ describe('WorkersAiClient', () => {
 
     expect(mockAi.run).toHaveBeenCalledTimes(2);
     expect(result).toBe('{"summary":"Bản dịch từ model 2"}');
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it('handles raw string response format', async () => {
@@ -46,11 +49,14 @@ describe('WorkersAiClient', () => {
   });
 
   it('throws descriptive error if all models fail', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const mockAi = {
       run: vi.fn().mockRejectedValue(new Error('Service Unavailable')),
     };
 
     const client = new WorkersAiClient({ ai: mockAi });
     await expect(client.generateJsonContent('sys', 'user')).rejects.toThrow('Service Unavailable');
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

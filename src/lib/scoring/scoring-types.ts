@@ -16,6 +16,7 @@ export interface ClusterScoringInput {
   claimCount: number;
   totalEngagement: number;
   publishedAtTimestamps: number[];
+  clusterCreatedAt?: number;
 }
 
 export interface ScoringEngineConfig {

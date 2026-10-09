@@ -1,4 +1,4 @@
-import { markArticleProcessed } from '../lib/db/article-queries';
+import { getUnprocessedArticles, markArticleProcessed } from '../lib/db/article-queries';
 import { makeArticleId } from '../lib/db/types';
 import { ClusterBuilder } from '../lib/graph/cluster-builder';
 import { EntityBuilder } from '../lib/graph/entity-builder';
@@ -6,11 +6,12 @@ import { ArticleExtractor } from '../lib/llm/extractor';
 import { GeminiClient } from '../lib/llm/gemini-client';
 import { insertExtraction } from '../lib/db/extraction-queries';
 import { CrawlerRegistry } from '../lib/sources/crawler-registry';
+import { notifyPromotedClusters } from '../lib/notifications/discord-notifier';
 
 export interface WorkerEnv {
   DB: D1Database;
   ARTICLE_QUEUE?: Queue;
-  AI?: any;
+  AI?: { run: (model: string, input: unknown) => Promise<unknown> };
   GEMINI_API_KEY?: string;
   GEMINI_TRANSLATION_KEY?: string;
   GEMINI_MODEL?: string;
@@ -25,6 +26,7 @@ export interface WorkerEnv {
   RADAR_GITHUB_TOKEN?: string;
   GITHUB_REPOSITORY?: string;
   INGEST_API_KEY?: string;
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 export interface QueueMessageBody {
@@ -42,12 +44,34 @@ export async function executeScheduledCrawl(env: WorkerEnv): Promise<void> {
   const summary = await registry.runAll(env.DB, 15);
   console.log(`[Crawler] Fetched: ${summary.totalFetched}, Duplicates: ${summary.duplicateCount}, Inserted: ${summary.insertedArticleIds.length}`);
 
-  if (env.ARTICLE_QUEUE && summary.insertedArticleIds.length > 0) {
-    for (const id of summary.insertedArticleIds) {
+  // Gather target article IDs to process: newly inserted articles first,
+  // plus recent unprocessed articles so the pipeline never stalls on duplicate crawls.
+  const targetIds = new Set<string>(summary.insertedArticleIds);
+  if (targetIds.size < 5) {
+    const pending = await getUnprocessedArticles(env.DB, 5 - targetIds.size);
+    for (const p of pending) {
+      targetIds.add(p.id);
+    }
+  }
+
+  if (env.ARTICLE_QUEUE && targetIds.size > 0) {
+    for (const id of targetIds) {
       try {
         await env.ARTICLE_QUEUE.send({ articleId: id });
       } catch (err) {
         console.error(`Failed to enqueue article ${id}:`, err);
+      }
+    }
+  } else if (!env.ARTICLE_QUEUE && targetIds.size > 0) {
+    // Local dev fallback: queue is not available in local dev, process up to 2 articles synchronously
+    const toProcess = Array.from(targetIds).slice(0, 2);
+    console.log(`[Crawler] Queue unavailable — processing ${toProcess.length} article(s) synchronously (dev fallback).`);
+    for (const id of toProcess) {
+      const row = await env.DB.prepare(
+        'SELECT title, body, source FROM articles WHERE id = ?'
+      ).bind(id).first<{ title: string; body: string | null; source: string }>();
+      if (row) {
+        await processArticlePipeline(env, id, row.title, row.body, row.source);
       }
     }
   }
@@ -86,6 +110,11 @@ export async function processArticlePipeline(
     // 5. Update topic clusters
     const clusterBuilder = new ClusterBuilder();
     await clusterBuilder.buildClustersFromGraph(env.DB);
+
+    // 6. Notify newly promoted high-signal READY clusters (zero-spam, once-per-cluster)
+    if (env.DISCORD_WEBHOOK_URL) {
+      await notifyPromotedClusters(env.DB, env.DISCORD_WEBHOOK_URL);
+    }
 
     return true;
   } catch (err) {

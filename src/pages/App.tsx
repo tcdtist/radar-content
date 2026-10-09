@@ -43,8 +43,8 @@ export const App: React.FC = () => {
   const { isAdmin, loginWithGoogle, logout } = useAuth();
 
   const {
-    stats, cards, isLoading, isCrawling, isProcessing, isSyncing,
-    handleAction: baseHandleAction, handleSyncCrawl, handleSyncProcess,
+    stats, cards, isLoading, isSyncing,
+    handleAction: baseHandleAction, handleSync,
   } = useIntelligenceFeed({ topic: activeTopic, status: activeStatus, sort: activeSort, isAdmin });
 
   const {
@@ -114,10 +114,7 @@ export const App: React.FC = () => {
   return (
     <div className="container">
       <Header
-        onSyncCrawl={() => handleProtectedAction(handleSyncCrawl)}
-        onSyncProcess={() => handleProtectedAction(handleSyncProcess)}
-        isCrawling={isCrawling}
-        isProcessing={isProcessing}
+        onSync={() => handleProtectedAction(handleSync)}
         isSyncing={isSyncing}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -151,10 +148,7 @@ export const App: React.FC = () => {
           }}
           onAction={handleAction}
           onResetFilters={handleResetFilters}
-          onSyncCrawl={() => handleProtectedAction(handleSyncCrawl)}
-          onSyncProcess={() => handleProtectedAction(handleSyncProcess)}
-          isCrawling={isCrawling}
-          isProcessing={isProcessing}
+          onSync={() => handleProtectedAction(handleSync)}
           isSyncing={isSyncing}
           isAdmin={isAdmin}
         />

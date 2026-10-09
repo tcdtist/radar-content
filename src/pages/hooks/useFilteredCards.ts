@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScoredIntelligenceCard } from '../../lib/db/types';
-import { getSourceTier, SourceTier } from '../../lib/scoring/source-tiers';
+import { SourceTier } from '../../lib/scoring/source-tiers';
+import { getHighestTierBadge } from '../utils/tier-badge';
 
 // Rolling 30-day cutoff for active signals (SAVED and WRITTEN cards are immune)
 const ROLLING_WINDOW_SECONDS = 30 * 86400;
@@ -101,15 +102,20 @@ export function useFilteredCards({
       );
     }
 
-    // Tier filter: check if card has ≥ 1 source matching selected tier(s)
+    // Tier filter: filter by card's highest tier (T1 / T2 / T3)
     if (activeTierFilter !== 'all') {
-      const allowedTiers: SourceTier[] =
+      const targetTier =
         activeTierFilter === 'T1'
-          ? [SourceTier.T1_AUTHORITY]
-          : [SourceTier.T1_AUTHORITY, SourceTier.T2_DEPTH];
-      result = result.filter((c) =>
-        c.sources?.some((s) => allowedTiers.includes(getSourceTier(s.source, s.url).tier))
-      );
+          ? SourceTier.T1_AUTHORITY
+          : activeTierFilter === 'T2'
+            ? SourceTier.T2_DEPTH
+            : activeTierFilter === 'T3'
+              ? SourceTier.T3_REFERENCE
+              : null;
+
+      if (targetTier) {
+        result = result.filter((c) => getHighestTierBadge(c.sources).tier === targetTier);
+      }
     }
 
     return result;

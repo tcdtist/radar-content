@@ -28,7 +28,7 @@ export async function ensureTranslationsTable(db: D1Database): Promise<void> {
   const res = await db
     .prepare(
       `CREATE TABLE IF NOT EXISTS card_translations (
-         card_id TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+         card_id TEXT NOT NULL,
          lang TEXT NOT NULL DEFAULT 'vi',
          summary TEXT NOT NULL,
          evidence TEXT NOT NULL,
@@ -126,3 +126,41 @@ export async function saveCardTranslation(
     throw err;
   }
 }
+
+/**
+ * Migrate cached translations from an old cluster ID to a new stable cluster ID.
+ * Used during cluster ID stabilization to preserve translation work.
+ */
+export async function migrateTranslations(
+  db: D1Database,
+  oldClusterId: ClusterId,
+  newClusterId: ClusterId
+): Promise<boolean> {
+  try {
+    // Check if old translation exists and new one doesn't
+    const oldTranslation = await getCardTranslation(db, oldClusterId, 'vi');
+    if (!oldTranslation) return false;
+
+    const existingNew = await getCardTranslation(db, newClusterId, 'vi');
+    if (existingNew) return false; // New cluster already has a translation
+
+    // Copy translation to new cluster ID
+    const migrated: CardTranslation = {
+      ...oldTranslation,
+      card_id: newClusterId,
+    };
+    const saved = await saveCardTranslation(db, migrated);
+
+    // Remove old translation record
+    if (saved) {
+      await db.prepare('DELETE FROM card_translations WHERE card_id = ? AND lang = ?')
+        .bind(oldClusterId, 'vi').run();
+    }
+
+    return saved;
+  } catch (err) {
+    console.error(`[TranslationMigrate] Failed to migrate ${oldClusterId} → ${newClusterId}:`, err);
+    return false;
+  }
+}
+

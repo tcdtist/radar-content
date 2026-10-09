@@ -53,6 +53,8 @@ export interface RssFeedConfig {
   readonly url: string;
   readonly defaultTopic?: string;
   readonly tier?: SourceTierCode;
+  /** Fallback URLs tried when primary fails (e.g. alternative RSSHub instances) */
+  readonly fallbackUrls?: readonly string[];
 }
 
 const T1_AUTHORITY_FEEDS: RssFeedConfig[] = [
@@ -81,6 +83,33 @@ const T1_AUTHORITY_FEEDS: RssFeedConfig[] = [
     tier: 'T1',
   },
 ];
+
+// ── 3b. X/Twitter Inner Circle via RSSHub Bridge ─────────────────────
+
+/** RSSHub public instances (tried in order for resilience) */
+const RSSHUB_INSTANCES = [
+  'https://rsshub.app',
+  'https://rsshub.rssforever.com',
+  'https://rss.fatpandac.com',
+] as const;
+
+/**
+ * Build RSS feed entries for X/Twitter Inner Circle accounts.
+ * Uses RSSHub bridge: rsshub.app/twitter/user/{handle}
+ */
+function buildXInnerCircleFeeds(): RssFeedConfig[] {
+  return INNER_CIRCLE_X_SEEDS.map((handle) => ({
+    name: `X: @${handle}`,
+    url: `${RSSHUB_INSTANCES[0]}/twitter/user/${handle}`,
+    defaultTopic: 'AI',
+    tier: 'T1' as SourceTierCode,
+    fallbackUrls: RSSHUB_INSTANCES.slice(1).map(
+      (instance) => `${instance}/twitter/user/${handle}`
+    ),
+  }));
+}
+
+const T1_X_INNER_CIRCLE_FEEDS: RssFeedConfig[] = buildXInnerCircleFeeds();
 
 const T2_DEPTH_FEEDS: RssFeedConfig[] = [
   {
@@ -126,6 +155,8 @@ const T3_REFERENCE_FEEDS: RssFeedConfig[] = [
 
 export const CURATED_TECH_FEEDS: readonly RssFeedConfig[] = [
   ...T1_AUTHORITY_FEEDS,
+  ...T1_X_INNER_CIRCLE_FEEDS,
   ...T2_DEPTH_FEEDS,
   ...T3_REFERENCE_FEEDS,
 ];
+

@@ -140,5 +140,38 @@ describe('ScoringEngine', () => {
     expect(score).toHaveProperty('sourceAuthority');
     expect(score.sourceAuthority).toBe(1.0);
   });
+
+  it('decays scores for month-old clusters to prevent dominating over fresh topics', () => {
+    const now = Math.floor(Date.now() / 1000);
+
+    // Old cluster created 30 days ago, even if it has high cumulative metrics and 1 new ping today
+    const oldClusterInput = {
+      sources: ['x', 'hn', 'reddit'] as SourceType[],
+      sourceWeights: [1.0, 0.75, 0.4],
+      evidenceCount: 10,
+      claimCount: 8,
+      totalEngagement: 900,
+      publishedAtTimestamps: [now - 3600], // 1 new ping today
+      clusterCreatedAt: now - 30 * 86400, // 30 days ago
+    };
+
+    // Fresh cluster created today with modest metrics
+    const freshClusterInput = {
+      sources: ['hn', 'reddit'] as SourceType[],
+      sourceWeights: [0.75, 0.4],
+      evidenceCount: 3,
+      claimCount: 2,
+      totalEngagement: 120,
+      publishedAtTimestamps: [now - 3600],
+      clusterCreatedAt: now - 3600, // 1 hour ago
+    };
+
+    const oldScore = engine.computeScore(oldClusterInput, now);
+    const freshScore = engine.computeScore(freshClusterInput, now);
+
+    // Fresh topic should outscore the 30-day-old topic due to cluster age decay
+    expect(freshScore.finalScore).toBeGreaterThan(oldScore.finalScore);
+    expect(oldScore.finalScore).toBeLessThan(30);
+  });
 });
 

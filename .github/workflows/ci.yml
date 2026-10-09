@@ -80,7 +80,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Vitest Suite (7 test suites)
+      - name: Run Vitest Suite (37 test files, 220+ tests)
         run: npm test
 
   build:

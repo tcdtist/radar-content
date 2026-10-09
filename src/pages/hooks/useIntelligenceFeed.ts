@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CardStatus, ScoredIntelligenceCard } from '../../lib/db/types';
 import {
   DashboardStats,
   fetchCards,
   fetchStats,
   triggerCrawl,
-  triggerProcess,
   updateCardAction,
 } from '../services/client';
 
@@ -26,8 +25,20 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
 
   const [cards, setCards] = useState<ScoredIntelligenceCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCrawling, setIsCrawling] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const paramsRef = useRef({ topic, status, sort });
+  useEffect(() => {
+    paramsRef.current = { topic, status, sort };
+  }, [topic, status, sort]);
+
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -47,7 +58,6 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
     loadData();
   }, [loadData]);
 
-
   const handleAction = async (id: string, action: CardStatus) => {
     const allowedStatuses = status.split(',');
     setCards((prev) =>
@@ -61,23 +71,56 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
     setStats(refreshedStats);
   };
 
-  const handleSyncCrawl = async () => {
-    setIsCrawling(true);
+  const handleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    const baselineCardCount = cards.length;
+    const baselineClusterCount = stats.totalClusters;
+
     try {
       await triggerCrawl();
-      await loadData();
-    } finally {
-      setIsCrawling(false);
-    }
-  };
 
-  const handleSyncProcess = async () => {
-    setIsProcessing(true);
-    try {
-      await triggerProcess();
-      await loadData();
+      // Immediate refresh right after crawl returns
+      const [postCrawlStats, postCrawlCards] = await Promise.all([
+        fetchStats(),
+        fetchCards(paramsRef.current),
+      ]);
+      if (!isMountedRef.current) return;
+      setStats(postCrawlStats);
+      setCards(postCrawlCards);
+
+      // If new cards or clusters arrived immediately, finish early
+      if (postCrawlCards.length > baselineCardCount || postCrawlStats.totalClusters > baselineClusterCount) {
+        return;
+      }
+
+      // Smart polling: check every 10s up to 6 times (~60s max) for background LLM processing
+      const maxAttempts = 6;
+      const pollIntervalMs = 10000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        if (!isMountedRef.current) return;
+
+        const [latestStats, latestCards] = await Promise.all([
+          fetchStats(),
+          fetchCards(paramsRef.current),
+        ]);
+
+        if (!isMountedRef.current) return;
+        setStats(latestStats);
+        setCards(latestCards);
+
+        if (latestCards.length > baselineCardCount || latestStats.totalClusters > baselineClusterCount) {
+          break;
+        }
+      }
+    } catch (err) {
+      console.error('[Sync] Error during sync or background polling:', err);
     } finally {
-      setIsProcessing(false);
+      if (isMountedRef.current) {
+        setIsSyncing(false);
+      }
     }
   };
 
@@ -85,12 +128,10 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
     stats,
     cards,
     isLoading,
-    isCrawling,
-    isProcessing,
-    isSyncing: isCrawling || isProcessing,
+    isSyncing,
     handleAction,
-    handleSyncCrawl,
-    handleSyncProcess,
+    handleSync,
     loadData,
   };
 }
+

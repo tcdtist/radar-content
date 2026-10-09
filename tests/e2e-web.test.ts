@@ -62,4 +62,36 @@ ${card.sources.map((s) => `- [${s.source.toUpperCase()}] ${s.title}: ${s.url}`).
     expect(md).toContain('### Verification Checklist');
     expect(md).toContain('### Sources');
   });
+
+  it('should filter cards by source tier (T1, T2, T3)', async () => {
+    const { getHighestTierBadge } = await import('../src/pages/utils/tier-badge');
+    const { SourceTier } = await import('../src/lib/scoring/source-tiers');
+
+    const t1Card = { ...TEST_CARDS[0], sources: [{ source: 'x' as const, title: 'X post', url: 'https://x.com/karpathy/status/123' }] };
+    const t2Card = { ...TEST_CARDS[0], sources: [{ source: 'hn' as const, title: 'HN post', url: 'https://news.ycombinator.com/item?id=123' }] };
+    const t3Card = { ...TEST_CARDS[0], sources: [{ source: 'reddit' as const, title: 'Reddit post', url: 'https://reddit.com/r/localllama/123' }] };
+
+    const cards = [t1Card, t2Card, t3Card];
+
+    expect(getHighestTierBadge(t1Card.sources).tier).toBe(SourceTier.T1_AUTHORITY);
+    expect(getHighestTierBadge(t2Card.sources).tier).toBe(SourceTier.T2_DEPTH);
+    expect(getHighestTierBadge(t3Card.sources).tier).toBe(SourceTier.T3_REFERENCE);
+
+    const filterByTier = (tier: string) => {
+      if (tier === 'all') return cards;
+      const targetTier =
+        tier === 'T1'
+          ? SourceTier.T1_AUTHORITY
+          : tier === 'T2'
+            ? SourceTier.T2_DEPTH
+            : SourceTier.T3_REFERENCE;
+      return cards.filter((c) => getHighestTierBadge(c.sources).tier === targetTier);
+    };
+
+    expect(filterByTier('all').length).toBe(3);
+    expect(filterByTier('T1').length).toBe(1);
+    expect(filterByTier('T2').length).toBe(1);
+    expect(filterByTier('T3').length).toBe(1);
+  });
 });
+
