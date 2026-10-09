@@ -38,6 +38,7 @@ describe('Data Retention & Auto-Pruning Queries', () => {
   });
 
   it('handles database errors gracefully without throwing', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const brokenDb = {
       prepare: vi.fn().mockImplementation(() => {
         throw new Error('D1 Connection Failed');
@@ -47,5 +48,7 @@ describe('Data Retention & Auto-Pruning Queries', () => {
     const stats = await pruneStaleData(brokenDb);
     expect(stats.prunedClusters).toBe(0);
     expect(stats.prunedArticles).toBe(0);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

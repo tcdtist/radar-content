@@ -1,7 +1,11 @@
 import { ILlmClient } from './translator';
 
+export interface WorkersAiBinding {
+  run: (model: string, input: unknown) => Promise<unknown>;
+}
+
 export interface WorkersAiClientOptions {
-  ai: any;
+  ai: WorkersAiBinding;
   model?: string;
   models?: string[];
   maxRetries?: number;
@@ -15,7 +19,7 @@ export const DEFAULT_WORKERS_AI_MODELS: readonly string[] = [
 ];
 
 export class WorkersAiClient implements ILlmClient {
-  private ai: any;
+  private ai: WorkersAiBinding;
   private models: string[];
 
   constructor(options: WorkersAiClientOptions) {
@@ -43,10 +47,11 @@ export class WorkersAiClient implements ILlmClient {
         });
 
         // Cloudflare Workers AI standard response shape: { response: string }
+        const resObj = response as { response?: string; result?: { response?: string }; text?: string } | null;
         const text =
           typeof response === 'string'
             ? response
-            : response?.response || response?.result?.response || response?.text || '';
+            : resObj?.response || resObj?.result?.response || resObj?.text || '';
 
         if (text && typeof text === 'string' && text.trim().length > 0) {
           return text.trim();

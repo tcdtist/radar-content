@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getUnprocessedArticles } from '../lib/db/article-queries';
 import { getDashboardStats } from '../lib/db/cluster-queries';
-import { CrawlerRegistry } from '../lib/sources/crawler-registry';
 import { getActiveSlotsForFrequency, getLocalHour, shouldExecuteCrawl } from '../lib/sources/schedule-manager';
 import { executeScheduledCrawl, processArticlePipeline, QueueMessageBody, WorkerEnv } from './pipeline';
 import { handleCheckExistingUrls, handleIngestPosts, IngestRequestPayload } from './ingest-handler';
@@ -43,11 +42,10 @@ app.get('/api/stats', requireAdmin, async (c) => {
   }
 });
 
-// Manual trigger for crawl ingestion - Requires Admin
+// Manual trigger for full pipeline (crawl + auto-enqueue for Gemini) - Requires Admin
 app.post('/api/crawl/trigger', requireAdmin, async (c) => {
-  const registry = new CrawlerRegistry();
-  const summary = await registry.runAll(c.env.DB, 10);
-  return c.json({ success: true, summary });
+  await executeScheduledCrawl(c.env);
+  return c.json({ success: true, message: 'Crawl + enqueue completed.' });
 });
 
 // External / local crawler ingestion endpoint - Requires Ingest API Key or Admin
@@ -77,35 +75,42 @@ app.post('/api/ingest/check', requireIngestAuth, async (c) => {
 // Manual trigger for processing batch of articles - Requires Admin
 // Uses async Queue to avoid HTTP timeout — Gemini LLM calls take 10-15s per article.
 app.post('/api/process/trigger', requireAdmin, async (c) => {
-  const pending = await getUnprocessedArticles(c.env.DB, 10);
+  const isSync = c.req.query('sync') === 'true';
+  const pending = await getUnprocessedArticles(c.env.DB, isSync ? 1 : 10);
 
   if (pending.length === 0) {
     return c.json({ success: true, totalPending: 0, queued: 0, message: 'No unprocessed articles found.' });
   }
 
-  // Preferred path: enqueue to ARTICLE_QUEUE in batch → Queue consumer handles Gemini async
-  if (c.env.ARTICLE_QUEUE) {
-    const messages = pending.map((art) => ({
-      body: { articleId: art.id, title: art.title, body: art.body, source: art.source },
-    }));
-    try {
-      await c.env.ARTICLE_QUEUE.sendBatch(messages);
-      return c.json({
-        success: true,
-        totalPending: pending.length,
-        queued: pending.length,
-        message: `Enqueued ${pending.length} articles in batch for async Gemini processing.`,
-      });
-    } catch (err) {
-      console.error('[Process Trigger] Failed to sendBatch articles to queue:', err);
-      return c.json({ success: false, error: 'Failed to enqueue articles' }, 500);
-    }
+  // If sync requested or no queue: process 1 article synchronously
+  if (isSync || !c.env.ARTICLE_QUEUE) {
+    const art = pending[0];
+    const ok = await processArticlePipeline(c.env, art.id, art.title, art.body, art.source);
+    return c.json({
+      success: ok,
+      totalPending: pending.length,
+      processedCount: ok ? 1 : 0,
+      processedArticle: { id: art.id, title: art.title },
+      message: ok ? 'Processed 1 article synchronously.' : 'Failed to process article.',
+    });
   }
 
-  // Fallback: process 1 article synchronously (no queue available)
-  const art = pending[0];
-  const ok = await processArticlePipeline(c.env, art.id, art.title, art.body, art.source);
-  return c.json({ success: ok, totalPending: pending.length, processedCount: ok ? 1 : 0, message: 'Queue unavailable — processed 1 article synchronously.' });
+  // Preferred path: enqueue to ARTICLE_QUEUE in batch → Queue consumer handles Gemini async
+  const messages = pending.map((art) => ({
+    body: { articleId: art.id, title: art.title, body: art.body, source: art.source },
+  }));
+  try {
+    await c.env.ARTICLE_QUEUE.sendBatch(messages);
+    return c.json({
+      success: true,
+      totalPending: pending.length,
+      queued: pending.length,
+      message: `Enqueued ${pending.length} articles in batch for async Gemini processing.`,
+    });
+  } catch (err) {
+    console.error('[Process Trigger] Failed to sendBatch articles to queue:', err);
+    return c.json({ success: false, error: 'Failed to enqueue articles' }, 500);
+  }
 });
 
 // Crawl schedule status endpoint

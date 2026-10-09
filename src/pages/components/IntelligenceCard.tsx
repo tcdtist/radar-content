@@ -1,6 +1,6 @@
 import React from 'react';
 import { CardStatus, ScoredIntelligenceCard } from '../../lib/db/types';
-import { formatDateTime, formatRelativeTime } from '../utils/date-format';
+import { getCardFreshnessInfo } from '../utils/card-freshness';
 import { getHighestTierBadge } from '../utils/tier-badge';
 import { BaseButton } from './BaseButton';
 import { ArrowRightIcon, CheckIcon, ClockIcon, StarIcon, TrashIcon } from './Icons';
@@ -12,10 +12,6 @@ interface IntelligenceCardProps {
 }
 
 export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSelect, onAction }) => {
-  const latestPublishedAt = card.sources.length > 0
-    ? Math.max(...card.sources.map((s) => s.published_at || 0))
-    : card.created_at;
-
   const primaryAuthors = Array.from(
     new Set(
       card.sources
@@ -25,6 +21,7 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
   ).slice(0, 2);
 
   const highestTier = getHighestTierBadge(card.sources);
+  const freshness = getCardFreshnessInfo(card);
 
   return (
     <div
@@ -45,6 +42,16 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
           <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span className={`badge badge-${card.status.toLowerCase()}`}>{card.status}</span>
+            {freshness.badge === 'NEW' && (
+              <span className="badge" style={{ backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', borderColor: 'rgba(34, 197, 94, 0.3)', fontSize: '0.68rem', padding: '0.1rem 0.35rem' }}>
+                NEW
+              </span>
+            )}
+            {freshness.badge === 'UPDATED' && (
+              <span className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', borderColor: 'rgba(59, 130, 246, 0.3)', fontSize: '0.68rem', padding: '0.1rem 0.35rem' }}>
+                UPDATED
+              </span>
+            )}
             {card.topic_tags.slice(0, 2).map((tag) => (
               <span key={tag} className="badge" style={{ backgroundColor: 'transparent', borderColor: 'var(--bg-tertiary)', color: 'var(--accent-bronze)' }}>
                 #{tag}
@@ -82,9 +89,14 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
               </span>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }} title={`Published: ${formatDateTime(latestPublishedAt || card.created_at)}`}>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+            title={freshness.tooltipText}
+          >
             <ClockIcon size={12} color="var(--text-muted)" />
-            <span className="font-mono">{formatRelativeTime(latestPublishedAt || card.created_at)}</span>
+            <span className="font-mono">
+              {freshness.relativeTimeText}
+            </span>
           </div>
         </div>
 

@@ -10,10 +10,7 @@ interface CardGridProps {
   onSelect: (card: ScoredIntelligenceCard) => void;
   onAction: (id: string, action: CardStatus) => void;
   onResetFilters: () => void;
-  onSyncCrawl: () => void;
-  onSyncProcess: () => void;
-  isCrawling?: boolean;
-  isProcessing?: boolean;
+  onSync: () => void;
   isSyncing?: boolean;
   isAdmin?: boolean;
 }
@@ -24,10 +21,7 @@ export const CardGrid: React.FC<CardGridProps> = ({
   onSelect,
   onAction,
   onResetFilters,
-  onSyncCrawl,
-  onSyncProcess,
-  isCrawling = false,
-  isProcessing = false,
+  onSync,
   isSyncing = false,
   isAdmin = false,
 }) => {
@@ -89,11 +83,8 @@ export const CardGrid: React.FC<CardGridProps> = ({
   if (cards.length === 0) {
     return (
       <EmptyState
-        onSyncCrawl={onSyncCrawl}
-        onSyncProcess={onSyncProcess}
+        onSync={onSync}
         onResetFilters={onResetFilters}
-        isCrawling={isCrawling}
-        isProcessing={isProcessing}
         isSyncing={isSyncing}
       />
     );

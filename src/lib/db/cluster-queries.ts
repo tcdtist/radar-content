@@ -30,15 +30,7 @@ export async function queryCards(
   const placeholders = statusList.map(() => '?').join(',');
   let orderBy = 'c.score DESC';
   if (filters.sort === 'newest') {
-    orderBy = `COALESCE(
-      (
-        SELECT MAX(COALESCE(a.published_at, a.crawled_at, 0))
-        FROM cluster_articles ca
-        JOIN articles a ON ca.article_id = a.id
-        WHERE ca.cluster_id = c.id
-      ),
-      c.created_at
-    ) DESC`;
+    orderBy = 'c.created_at DESC, c.updated_at DESC';
   }
   if (filters.sort === 'evidence') orderBy = 'c.article_count DESC';
 
@@ -75,6 +67,7 @@ export async function queryCards(
       JOIN articles a ON ca.article_id = a.id
       LEFT JOIN extractions e ON a.id = e.article_id
       WHERE ca.cluster_id = ?
+      ORDER BY a.published_at DESC, a.crawled_at DESC
       LIMIT 10
     `).bind(clusterId).all<{
       id: string;

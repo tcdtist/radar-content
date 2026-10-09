@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CardTranslation } from '../src/lib/db/types';
 import worker from '../src/workers/api';
 import { getJwtSecret, signSessionToken } from '../src/workers/auth';
 import { WorkerEnv } from '../src/workers/pipeline';
@@ -7,7 +8,7 @@ describe('Cards Translation API (POST /api/cards/:id/translate)', () => {
   const testEnv: WorkerEnv = {
     DB: {
       prepare: vi.fn().mockImplementation((sql: string) => ({
-        bind: vi.fn().mockImplementation((...params: any[]) => ({
+        bind: vi.fn().mockImplementation((...params: unknown[]) => ({
           first: async () => (sql.includes('card_translations') && params[0] === 'cluster_cached_1' ? {
             card_id: 'cluster_cached_1',
             lang: 'vi',
@@ -180,7 +181,7 @@ describe('Cards Translation API (POST /api/cards/:id/translate)', () => {
       const res = await worker.fetch(req, testEnv, mockCtx);
       expect(res.status).toBe(200);
 
-      const data = (await res.json()) as { success: boolean; isCached: boolean; translation: any };
+      const data = (await res.json()) as { success: boolean; isCached: boolean; translation: CardTranslation };
       expect(data.success).toBe(true);
       expect(data.isCached).toBe(false);
       expect(data.translation.evidence).toHaveLength(2);

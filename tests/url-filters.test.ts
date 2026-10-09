@@ -9,7 +9,7 @@ import {
 
 describe('URL Filter Parameters Parsing & Synchronization', () => {
   let currentUrl = 'http://localhost:3000/';
-  let historyState: any = {};
+  let historyState: Record<string, unknown> = {};
 
   beforeEach(() => {
     currentUrl = 'http://localhost:3000/';
@@ -33,12 +33,12 @@ describe('URL Filter Parameters Parsing & Synchronization', () => {
         get state() {
           return historyState;
         },
-        pushState: (state: any, _title: string, url: string) => {
-          historyState = state;
+        pushState: (state: unknown, _title: string, url: string) => {
+          historyState = (state as Record<string, unknown>) || {};
           currentUrl = url.startsWith('http') ? url : `http://localhost:3000${url}`;
         },
-        replaceState: (state: any, _title: string, url: string) => {
-          historyState = state;
+        replaceState: (state: unknown, _title: string, url: string) => {
+          historyState = (state as Record<string, unknown>) || {};
           currentUrl = url.startsWith('http') ? url : `http://localhost:3000${url}`;
         },
       },

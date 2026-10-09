@@ -88,9 +88,9 @@ CREATE TABLE IF NOT EXISTS mock_snapshot (
   sync_date TEXT NOT NULL
 );
 
--- On-demand translations cache for cards
+-- On-demand translations cache for cards (no CASCADE: translations survive cluster re-IDs)
 CREATE TABLE IF NOT EXISTS card_translations (
-  card_id TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+  card_id TEXT NOT NULL,
   lang TEXT NOT NULL DEFAULT 'vi',
   summary TEXT NOT NULL,
   evidence TEXT NOT NULL,

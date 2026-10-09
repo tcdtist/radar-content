@@ -27,7 +27,7 @@ describe('executeCardTranslation', () => {
           },
         })
       ),
-    } as any);
+    } as unknown as Response);
 
     const mockAi = {
       run: vi.fn().mockResolvedValue({
@@ -42,7 +42,7 @@ describe('executeCardTranslation', () => {
     };
 
     const env: WorkerEnv = {
-      DB: {} as any,
+      DB: {} as unknown as D1Database,
       GEMINI_API_KEY: 'test-key',
       AI: mockAi,
     };
@@ -72,7 +72,7 @@ describe('executeCardTranslation', () => {
     };
 
     const env: WorkerEnv = {
-      DB: {} as any,
+      DB: {} as unknown as D1Database,
       AI: mockAi,
     };
 

@@ -1,13 +1,10 @@
 import React from 'react';
 import { BaseButton } from './BaseButton';
 import { GoogleAuthButton } from './GoogleAuthButton';
-import { BrainIcon, LockIcon, MoonIcon, RadarIcon, RefreshIcon, SunIcon } from './Icons';
+import { LockIcon, MoonIcon, RadarIcon, RefreshIcon, SunIcon } from './Icons';
 
 interface HeaderProps {
-  onSyncCrawl: () => void;
-  onSyncProcess: () => void;
-  isCrawling?: boolean;
-  isProcessing?: boolean;
+  onSync: () => void;
   isSyncing?: boolean;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
@@ -17,10 +14,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onSyncCrawl,
-  onSyncProcess,
-  isCrawling = false,
-  isProcessing = false,
+  onSync,
   isSyncing = false,
   theme,
   onToggleTheme,
@@ -28,24 +22,14 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onLoginGoogle,
 }) => {
-  const handleCrawlClick = () => {
+  const handleSyncClick = () => {
     if (!isAdmin) {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.prompt();
       }
       return;
     }
-    onSyncCrawl();
-  };
-
-  const handleProcessClick = () => {
-    if (!isAdmin) {
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.prompt();
-      }
-      return;
-    }
-    onSyncProcess();
+    onSync();
   };
 
   return (
@@ -149,29 +133,18 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         <BaseButton
-          id="btn-trigger-crawl"
-          variant="ghost"
-          size="md"
-          onClick={handleCrawlClick}
-          disabled={isCrawling || isProcessing || isSyncing}
-          isLoading={isCrawling}
-        >
-          {!isAdmin ? <LockIcon size={13} color="var(--text-muted)" /> : <RefreshIcon size={14} />}
-          <span>Ingest</span>
-        </BaseButton>
-
-        <BaseButton
-          id="btn-trigger-process"
+          id="btn-trigger-sync"
           variant="coral"
           size="md"
-          onClick={handleProcessClick}
-          disabled={isCrawling || isProcessing || isSyncing}
-          isLoading={isProcessing}
+          onClick={handleSyncClick}
+          disabled={isSyncing}
+          isLoading={isSyncing}
         >
-          {!isAdmin ? <LockIcon size={13} color="#ffffff" /> : <BrainIcon size={14} color="#ffffff" />}
-          <span>Run Intelligence</span>
+          {!isSyncing && (!isAdmin ? <LockIcon size={13} color="#ffffff" /> : <RefreshIcon size={14} color="#ffffff" />)}
+          <span>Sync</span>
         </BaseButton>
       </div>
     </header>
   );
 };
+

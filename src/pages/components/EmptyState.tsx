@@ -1,22 +1,16 @@
 import React from 'react';
 import { BaseButton } from './BaseButton';
-import { BrainIcon, RadarIcon, RefreshIcon } from './Icons';
+import { RadarIcon, RefreshIcon } from './Icons';
 
 interface EmptyStateProps {
-  onSyncCrawl: () => void;
-  onSyncProcess: () => void;
+  onSync: () => void;
   onResetFilters: () => void;
-  isCrawling?: boolean;
-  isProcessing?: boolean;
   isSyncing?: boolean;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  onSyncCrawl,
-  onSyncProcess,
+  onSync,
   onResetFilters,
-  isCrawling = false,
-  isProcessing = false,
   isSyncing = false,
 }) => {
   return (
@@ -68,7 +62,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             lineHeight: 1.6,
           }}
         >
-          No intelligence signals match the active filter criteria. Ingest fresh tech discussions from Hacker News and Reddit, trigger Leiden clustering, or reset the search filters.
+          No intelligence signals match the active filter criteria. Sync to crawl fresh tech discussions and run Leiden clustering, or reset the search filters.
         </p>
       </div>
 
@@ -78,27 +72,17 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </BaseButton>
 
         <BaseButton
-          variant="ghost"
-          size="sm"
-          onClick={onSyncCrawl}
-          disabled={isCrawling || isProcessing || isSyncing}
-          isLoading={isCrawling}
-        >
-          <RefreshIcon size={13} />
-          <span>Ingest Now</span>
-        </BaseButton>
-
-        <BaseButton
           variant="coral"
           size="sm"
-          onClick={onSyncProcess}
-          disabled={isCrawling || isProcessing || isSyncing}
-          isLoading={isProcessing}
+          onClick={onSync}
+          disabled={isSyncing}
+          isLoading={isSyncing}
         >
-          <BrainIcon size={13} color="#ffffff" />
-          <span>Run Intelligence</span>
+          {!isSyncing && <RefreshIcon size={13} color="#ffffff" />}
+          <span>Sync</span>
         </BaseButton>
       </div>
     </div>
   );
 };
+

@@ -40,10 +40,13 @@ cardsApp.get('/', async (c) => {
       const allowed = status.split(',').map((s) => s.trim().toUpperCase());
       mockList = mockList.filter((cd) => allowed.includes(cd.status));
     }
-    if (sort === 'newest') mockList.sort((a, b) => b.updated_at - a.updated_at);
-    else if (sort === 'evidence')
+    if (sort === 'newest') {
+      mockList.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    } else if (sort === 'evidence') {
       mockList.sort((a, b) => (b.evidence?.length || 0) - (a.evidence?.length || 0));
-    else mockList.sort((a, b) => b.score - a.score);
+    } else {
+      mockList.sort((a, b) => b.score - a.score);
+    }
 
     return c.json({
       success: true,
