@@ -47,11 +47,6 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
                 NEW
               </span>
             )}
-            {freshness.badge === 'UPDATED' && (
-              <span className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', borderColor: 'rgba(59, 130, 246, 0.3)', fontSize: '0.68rem', padding: '0.1rem 0.35rem' }}>
-                UPDATED
-              </span>
-            )}
             {card.topic_tags.slice(0, 2).map((tag) => (
               <span key={tag} className="badge" style={{ backgroundColor: 'transparent', borderColor: 'var(--bg-tertiary)', color: 'var(--accent-bronze)' }}>
                 #{tag}
@@ -90,13 +85,26 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
             ))}
           </div>
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}
             title={freshness.tooltipText}
           >
             <ClockIcon size={12} color="var(--text-muted)" />
             <span className="font-mono">
               {freshness.relativeTimeText}
             </span>
+            {freshness.hasFreshSourceUpdate && (
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: '#3b82f6',
+                  display: 'inline-block',
+                  cursor: 'help',
+                }}
+                title={freshness.updateTooltipText || undefined}
+              />
+            )}
           </div>
         </div>
 

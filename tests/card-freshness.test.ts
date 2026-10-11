@@ -17,6 +17,7 @@ describe('Card Freshness Temporal Logic & Badges (getCardFreshnessInfo)', () => 
     expect(info.hasFreshSourceUpdate).toBe(false);
     expect(info.badge).toBe('NEW');
     expect(info.relativeTimeText).toBe('12h ago');
+    expect(info.updateTooltipText).toBeNull();
     expect(info.tooltipText).toContain('Emerged:');
     expect(info.tooltipText).not.toContain('First emerged:');
   });
@@ -49,9 +50,10 @@ describe('Card Freshness Temporal Logic & Badges (getCardFreshnessInfo)', () => 
     expect(info.isNewlyEmerged).toBe(false);
     expect(info.hasFreshSourceUpdate).toBe(true);
     expect(info.badge).toBe('UPDATED');
-    expect(info.relativeTimeText).toBe('20d ago (upd 2h ago)');
+    expect(info.relativeTimeText).toBe('20d ago');
+    expect(info.updateTooltipText).toBe('Updated 2h ago');
     expect(info.tooltipText).toContain('First emerged:');
-    expect(info.tooltipText).toContain('Latest source:');
+    expect(info.tooltipText).toContain('Updated:');
   });
 
   it('assigns no badge to older cards when fresh sources are older than 72 hours', () => {
