@@ -30,7 +30,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onTierFilterChange,
 }) => {
   return (
-    <div className="base-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.75rem' }}>
+    <div className="base-card filter-bar-sticky" style={{ padding: '1rem 1.25rem', marginBottom: '1.75rem' }}>
       <div
         style={{
           display: 'flex',

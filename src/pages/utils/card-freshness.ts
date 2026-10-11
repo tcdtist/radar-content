@@ -17,6 +17,7 @@ export interface CardFreshnessInfo {
   badge: 'NEW' | 'UPDATED' | null;
   relativeTimeText: string;
   tooltipText: string;
+  updateTooltipText?: string | null;
 }
 
 /**
@@ -52,13 +53,15 @@ export function getCardFreshnessInfo(
   }
 
   const nowMs = nowSec * 1000;
-  const relativeTimeText = hasFreshSourceUpdate
-    ? `${formatRelativeTime(createdAt, nowMs)} (upd ${formatRelativeTime(latestPublishedAt, nowMs)})`
-    : formatRelativeTime(createdAt || latestPublishedAt, nowMs);
+  const relativeTimeText = formatRelativeTime(createdAt || latestPublishedAt, nowMs);
 
   const tooltipText = hasFreshSourceUpdate
-    ? `First emerged: ${formatDateTime(createdAt)} | Latest source: ${formatDateTime(latestPublishedAt)}`
+    ? `First emerged: ${formatDateTime(createdAt)} | Updated: ${formatDateTime(latestPublishedAt)}`
     : `Emerged: ${formatDateTime(createdAt || latestPublishedAt)}`;
+
+  const updateTooltipText = hasFreshSourceUpdate
+    ? `Updated ${formatRelativeTime(latestPublishedAt, nowMs)}`
+    : null;
 
   return {
     latestPublishedAt,
@@ -68,5 +71,6 @@ export function getCardFreshnessInfo(
     badge,
     relativeTimeText,
     tooltipText,
+    updateTooltipText,
   };
 }
