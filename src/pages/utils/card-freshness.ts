@@ -7,6 +7,7 @@ export interface CardFreshnessSource {
 export interface CardFreshnessTarget {
   created_at?: number | null;
   sources?: CardFreshnessSource[];
+  freshness?: CardFreshnessInfo;
 }
 
 export interface CardFreshnessInfo {
@@ -14,21 +15,24 @@ export interface CardFreshnessInfo {
   cardAgeHours: number;
   isNewlyEmerged: boolean;
   hasFreshSourceUpdate: boolean;
-  badge: 'NEW' | 'UPDATED' | null;
+  badge: 'NEW' | null;
   relativeTimeText: string;
   tooltipText: string;
   updateTooltipText?: string | null;
 }
 
 /**
- * Computes temporal freshness metadata, badges, and dual relative timestamp for an intelligence card.
- * - NEW badge: Cluster created within the last 48 hours.
- * - UPDATED badge: Older cluster (>48h) that received fresh sources within the last 72 hours.
+ * Retrieves temporal freshness metadata for an intelligence card.
+ * Prioritizes backend precomputed freshness, with fallback for backward compatibility.
  */
 export function getCardFreshnessInfo(
   card: CardFreshnessTarget,
   nowSec: number = Math.floor(Date.now() / 1000)
 ): CardFreshnessInfo {
+  if (card.freshness) {
+    return card.freshness;
+  }
+
   const sources = card.sources ?? [];
   const createdAt = card.created_at ?? 0;
 
@@ -45,12 +49,7 @@ export function getCardFreshnessInfo(
     latestPublishedAt > createdAt + 3600 &&
     nowSec - latestPublishedAt < 72 * 3600;
 
-  let badge: 'NEW' | 'UPDATED' | null = null;
-  if (isNewlyEmerged) {
-    badge = 'NEW';
-  } else if (hasFreshSourceUpdate) {
-    badge = 'UPDATED';
-  }
+  const badge: 'NEW' | null = isNewlyEmerged ? 'NEW' : null;
 
   const nowMs = nowSec * 1000;
   const relativeTimeText = formatRelativeTime(createdAt || latestPublishedAt, nowMs);

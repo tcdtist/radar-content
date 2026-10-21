@@ -1,8 +1,7 @@
 import React from 'react';
 import { CalendarIcon, SearchIcon } from './Icons';
 import { STATUS_OPTIONS, TIER_FILTER_OPTIONS, TOPICS } from './filter-bar-config';
-
-export { TOPICS, STATUS_OPTIONS, TIER_FILTER_OPTIONS };
+export { STATUS_OPTIONS, TIER_FILTER_OPTIONS, TOPICS };
 
 interface FilterBarProps {
   activeTopic: string;
@@ -15,6 +14,7 @@ interface FilterBarProps {
   onSearchChange: (query: string) => void;
   activeTierFilter?: string;
   onTierFilterChange?: (tier: string) => void;
+  dateWindowLabel?: string;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -28,6 +28,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onSearchChange,
   activeTierFilter = 'all',
   onTierFilterChange,
+  dateWindowLabel = 'Last 7 Days',
 }) => {
   return (
     <div className="base-card filter-bar-sticky" style={{ padding: '1rem 1.25rem', marginBottom: '1.75rem' }}>
@@ -188,7 +189,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             }}
           >
             <CalendarIcon size={12} />
-            <span>10/09 - Today</span>
+            <span>{dateWindowLabel}</span>
           </span>
         </div>
       </div>

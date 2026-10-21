@@ -59,8 +59,8 @@ export class ScoringEngine {
       this.weightEngagement * engagementSignal +
       this.weightRecency * recencyBoost;
 
-    // Cluster age decay: Prevents month-old topics from permanently dominating the top of the feed.
-    // Topics within 3 days receive 100% score. Older topics decay smoothly with a half-life of 10 days.
+    // Cluster age decay: Topics within 3 days receive 100% score.
+    // Older topics decay with a 10-day half-life in DB.
     const clusterCreatedAt = input.clusterCreatedAt ?? newestTime;
     const clusterAgeHours = Math.max(0, (nowSeconds - clusterCreatedAt) / 3600);
     const clusterAgeDays = clusterAgeHours / 24;
@@ -68,7 +68,11 @@ export class ScoringEngine {
       ? 1.0
       : Math.exp(-(clusterAgeDays - 3) / 10);
 
-    const finalScore = Math.round(Math.min(100, Math.max(0, rawScore * ageDecayMultiplier * 100)));
+    // Final base score stored in DB: Unboosted normalized score [0, 100]
+    // Temporal velocity boost is applied strictly ON-READ during queryCards to avoid double boosting.
+    const finalScore = Math.round(
+      Math.min(100, Math.max(0, rawScore * ageDecayMultiplier * 100))
+    );
 
     return {
       sourceDiversity: Math.round(sourceDiversity * 100) / 100,
@@ -80,10 +84,46 @@ export class ScoringEngine {
     };
   }
 
-  determineStatus(input: ClusterScoringInput, currentStatus: CardStatus = 'LEAD'): CardStatus {
+  computeDynamicScore(
+    baseScore: number,
+    clusterCreatedAt: number,
+    latestActivityAt: number,
+    nowSeconds = Math.floor(Date.now() / 1000)
+  ): number {
+    const clusterAgeDays = Math.max(0, (nowSeconds - clusterCreatedAt) / 86400);
+    const activityAgeHours = Math.max(0, (nowSeconds - latestActivityAt) / 3600);
+
+    const velocityMultiplier = activityAgeHours <= 24 ? 1.15 : (activityAgeHours <= 48 ? 1.08 : 1.0);
+    const ageDecayMultiplier = clusterAgeDays <= 3 ? 1.0 : Math.exp(-(clusterAgeDays - 3) / 4);
+
+    return Math.round(Math.min(100, Math.max(0, baseScore * velocityMultiplier * ageDecayMultiplier)));
+  }
+
+  computeDynamicVelocityScore(
+    baseScore: number,
+    clusterCreatedAt: number,
+    latestActivityAt: number,
+    nowSeconds = Math.floor(Date.now() / 1000)
+  ): number {
+    return this.computeDynamicScore(baseScore, clusterCreatedAt, latestActivityAt, nowSeconds);
+  }
+
+  determineStatus(
+    input: ClusterScoringInput,
+    currentStatus: CardStatus = 'LEAD',
+    nowSeconds = Math.floor(Date.now() / 1000),
+    calculatedScore?: number
+  ): CardStatus {
     // If user already took action, keep the user decision
     if (['SAVED', 'WRITTEN', 'DISMISSED'].includes(currentStatus)) {
       return currentStatus;
+    }
+
+    // Seal from active radar if older than 7 days or score falls below 35 floor
+    const createdAt = input.clusterCreatedAt ?? nowSeconds;
+    const clusterAgeDays = Math.max(0, (nowSeconds - createdAt) / 86400);
+    if (clusterAgeDays > 7 || (calculatedScore !== undefined && calculatedScore < 35)) {
+      return 'SEALED';
     }
 
     // Authority-based auto-promote: ≥ 1 Tier 1 or Tier 2 source (weight ≥ 0.75) + ≥ 2 evidence → READY

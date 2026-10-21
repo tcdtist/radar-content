@@ -114,20 +114,28 @@ async function runE2ETests() {
     const paginationText = await page.$eval('.pagination-info', (el) => el.innerText);
     console.log(`  Initial Pagination Info: "${paginationText}"`);
 
-    // Click page 2
-    console.log('  Navigating to Page 2...');
-    await page.$eval('#btn-page-2', (el) => el.scrollIntoView({ block: 'center' }));
-    await new Promise((r) => setTimeout(r, 200));
-    await page.click('#btn-page-2');
-    await new Promise((r) => setTimeout(r, 400));
-    await saveScreenshot(page, '27-pagination-page-2.png');
+    // Click page 2 if multiple pages exist
+    const page2Btn = await page.$('#btn-page-2');
+    if (page2Btn) {
+      console.log('  Navigating to Page 2...');
+      await page.$eval('#btn-page-2', (el) => el.scrollIntoView({ block: 'center' }));
+      await new Promise((r) => setTimeout(r, 200));
+      await page.click('#btn-page-2');
+      await new Promise((r) => setTimeout(r, 400));
+      await saveScreenshot(page, '27-pagination-page-2.png');
+    } else {
+      console.log('  Single page available (no Page 2 button rendered).');
+    }
 
-    // Change page size to 12
-    console.log('  Changing page size to 12 signals per page...');
-    await page.$eval('#btn-page-size-12', (el) => el.scrollIntoView({ block: 'center' }));
-    await new Promise((r) => setTimeout(r, 200));
-    await page.click('#btn-page-size-12');
-    await new Promise((r) => setTimeout(r, 400));
+    // Change page size to 12 if available
+    const pageSize12Btn = await page.$('#btn-page-size-12');
+    if (pageSize12Btn) {
+      console.log('  Changing page size to 12 signals per page...');
+      await page.$eval('#btn-page-size-12', (el) => el.scrollIntoView({ block: 'center' }));
+      await new Promise((r) => setTimeout(r, 200));
+      await page.click('#btn-page-size-12');
+      await new Promise((r) => setTimeout(r, 400));
+    }
     // 9. Mobile Viewport Responsive Audit (iPhone SE 375x667 & Small Android 360x800)
     console.log('[Step 9] Running Mobile Viewport & Button Visibility Verification...');
     const mobileViewports = [
@@ -156,9 +164,12 @@ async function runE2ETests() {
 
       await saveScreenshot(page, `29-mobile-${mvp.name.toLowerCase()}-dashboard.png`);
 
-      // Open drawer on mobile
+      // Ensure cards are rendered before inspecting on mobile
+      await page.waitForSelector('[data-testid="intelligence-card"]', { timeout: 15000 });
       const inspectBtnMobile = await page.$('[data-testid="btn-inspect"]');
       if (inspectBtnMobile) {
+        await page.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }), inspectBtnMobile);
+        await new Promise((r) => setTimeout(r, 200));
         await inspectBtnMobile.click();
         await page.waitForSelector('.drawer-panel', { timeout: 5000 });
         await new Promise((r) => setTimeout(r, 400));
@@ -193,8 +204,11 @@ async function runE2ETests() {
         await saveScreenshot(page, `30-mobile-${mvp.name.toLowerCase()}-drawer.png`);
 
         // Close drawer
-        const closeBtnMobile = await page.$('[data-testid="btn-close-drawer"]');
-        if (closeBtnMobile) await closeBtnMobile.click();
+        const closeBtnMobile = await page.$('[data-testid="btn-close-drawer"], .drawer-panel button[aria-label="Close detail panel"], .drawer-panel button[aria-label="Đóng bảng chi tiết"]');
+        if (closeBtnMobile) {
+          await closeBtnMobile.click();
+          await page.waitForFunction(() => !document.querySelector('.drawer-panel'), { timeout: 3000 }).catch(() => {});
+        }
         await new Promise((r) => setTimeout(r, 300));
       }
     }

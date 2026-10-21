@@ -26,7 +26,7 @@ export class GeminiClient {
 
   constructor(options: GeminiClientOptions) {
     this.apiKey = options.apiKey;
-    this.maxRetriesPerModel = options.maxRetries ?? 2;
+    this.maxRetriesPerModel = options.maxRetries ?? 1;
 
     const baseList = options.models && options.models.length > 0
       ? options.models

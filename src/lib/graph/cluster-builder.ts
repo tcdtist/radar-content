@@ -3,8 +3,11 @@ import { migrateTranslations } from '../db/translation-queries';
 import { CardStatus, makeArticleId, makeClusterId, SourceType } from '../db/types';
 import { ScoringEngine } from '../scoring/scoring-engine';
 import { getAuthorityWeight } from '../scoring/source-tiers';
+import { deriveClusterLabel, deriveStableClusterId, determineClusterTags } from './cluster-builder-utils';
 import { fetchGraph } from './graph-queries';
 import { LeidenAlgorithm } from './leiden-algorithm';
+
+export const SEAL_WINDOW_SECONDS = 7 * 86400;
 
 export interface ClusteringRunSummary {
   communitiesDetected: number;
@@ -13,30 +16,12 @@ export interface ClusteringRunSummary {
 }
 
 export class ClusterBuilder {
-  private leiden: LeidenAlgorithm;
-  private scorer: ScoringEngine;
+  constructor(
+    private leiden = new LeidenAlgorithm(),
+    private scorer = new ScoringEngine()
+  ) {}
 
-  constructor(leiden = new LeidenAlgorithm(), scorer = new ScoringEngine()) {
-    this.leiden = leiden;
-    this.scorer = scorer;
-  }
-
-  /**
-   * Derive a deterministic cluster ID from sorted entity member set.
-   * Same entities → same hash → stable cluster ID across pipeline runs.
-   */
-  private deriveStableClusterId(entityIds: string[]): string {
-    const sorted = [...entityIds].sort();
-    const key = sorted.join('|');
-    let hash = 0;
-    for (let i = 0; i < key.length; i++) {
-      const ch = key.charCodeAt(i);
-      hash = ((hash << 5) - hash + ch) | 0;
-    }
-    return `cluster_${Math.abs(hash).toString(36)}`;
-  }
-
-  async buildClustersFromGraph(db: D1Database): Promise<ClusteringRunSummary> {
+  async buildClustersFromGraph(db: D1Database, targetEntityIds?: string[]): Promise<ClusteringRunSummary> {
     const { nodes, edges } = await fetchGraph(db);
     if (nodes.length === 0) {
       return { communitiesDetected: 0, clustersUpserted: 0, translationsMigrated: 0 };
@@ -53,86 +38,114 @@ export class ClusterBuilder {
 
     let clustersUpserted = 0;
     let translationsMigrated = 0;
+    const now = Math.floor(Date.now() / 1000);
+    const targetSet = targetEntityIds && targetEntityIds.length > 0 ? new Set(targetEntityIds) : null;
 
     for (const [, entityIds] of communities.entries()) {
       if (entityIds.length === 0) continue;
+      if (targetSet && !entityIds.some((id) => targetSet.has(id))) continue;
 
-      // Find top entity names for naming the cluster
-      const topEntities = nodes
+      const communityEntities = nodes
         .filter((n) => entityIds.includes(n.id))
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, 3)
-        .map((n) => n.name);
+        .sort((a, b) => b.weight - a.weight);
 
-      const formatTitle = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
-      const label = topEntities.length > 0
-        ? (topEntities.length === 1
-            ? formatTitle(topEntities[0])
-            : `${formatTitle(topEntities[0])} · ${topEntities.slice(1, 3).join(', ')}`)
-        : `Topic Group`;
+      const topEntities = communityEntities.slice(0, 3).map((n) => n.name);
+      const queryEntityIds = communityEntities.slice(0, 25).map((n) => n.id);
 
-      // Deterministic cluster ID from entity member set (stable across Leiden runs)
-      const stableId = this.deriveStableClusterId(entityIds);
-      const clusterId = makeClusterId(stableId);
+      const label = deriveClusterLabel(topEntities);
+      const baseStableId = deriveStableClusterId(entityIds);
+      const baseClusterId = makeClusterId(baseStableId);
 
-      // Check for legacy non-deterministic cluster with same label → migrate translation
-      const legacyRow = await db.prepare(
-        `SELECT id FROM clusters WHERE label = ? AND id != ? LIMIT 1`
-      ).bind(label, clusterId).first<{ id: string }>();
+      const existingCluster = await db.prepare(
+        'SELECT created_at, status FROM clusters WHERE id = ? LIMIT 1'
+      ).bind(baseClusterId).first<{ created_at: number; status: CardStatus }>();
 
-      if (legacyRow) {
-        const migrated = await migrateTranslations(db, makeClusterId(legacyRow.id), clusterId);
-        if (migrated) translationsMigrated++;
-        // Clean up legacy cluster (articles will be re-linked to stable ID)
-        await db.prepare('DELETE FROM cluster_articles WHERE cluster_id = ?').bind(legacyRow.id).run();
-        await db.prepare('DELETE FROM clusters WHERE id = ?').bind(legacyRow.id).run();
+      const isBaseSealed = Boolean(
+        existingCluster && (
+          existingCluster.status === 'SEALED' ||
+          (now - existingCluster.created_at) > SEAL_WINDOW_SECONDS
+        )
+      );
+
+      if (existingCluster && existingCluster.status !== 'SEALED' && (now - existingCluster.created_at) > SEAL_WINDOW_SECONDS) {
+        await db.prepare("UPDATE clusters SET status = 'SEALED', updated_at = unixepoch() WHERE id = ?").bind(baseClusterId).run();
       }
 
-      // Query articles linked to these entityIds
-      const placeholders = entityIds.map(() => '?').join(',');
+      // Query articles linked to top entities in this community (max 25 variables)
+      // Hard 7-day rolling horizon: active radar waves strictly cluster fresh articles
+      const activeCutoff = now - SEAL_WINDOW_SECONDS;
+      const placeholders = queryEntityIds.map(() => '?').join(',');
       const articleRows = await db.prepare(`
-        SELECT DISTINCT a.id, a.source, a.url, a.published_at, e.evidence
+        SELECT DISTINCT a.id, a.source, a.url, a.published_at, a.crawled_at, e.evidence
         FROM article_entities ae
         JOIN articles a ON ae.article_id = a.id
         LEFT JOIN extractions e ON a.id = e.article_id
         WHERE ae.entity_id IN (${placeholders})
+          AND (a.crawled_at >= ? OR a.published_at >= ?)
         ORDER BY a.crawled_at DESC LIMIT 15
-      `).bind(...entityIds).all<{
+      `).bind(...queryEntityIds, activeCutoff, activeCutoff).all<{
         id: string;
         source: SourceType;
         url: string;
         published_at: number | null;
+        crawled_at: number;
         evidence: string | null;
       }>();
 
       let articles = articleRows.results ?? [];
 
-      // Fallback matching by entity names in title/body if article_entities is empty
       if (articles.length === 0 && topEntities.length > 0) {
         const likes = topEntities.map(() => 'a.title LIKE ?').join(' OR ');
         const params = topEntities.map((name) => `%${name}%`);
         const fallbackRows = await db.prepare(`
-          SELECT DISTINCT a.id, a.source, a.url, a.published_at, e.evidence
+          SELECT DISTINCT a.id, a.source, a.url, a.published_at, a.crawled_at, e.evidence
           FROM articles a
           LEFT JOIN extractions e ON a.id = e.article_id
-          WHERE ${likes}
+          WHERE (${likes})
+            AND (a.crawled_at >= ? OR a.published_at >= ?)
           ORDER BY a.crawled_at DESC LIMIT 10
-        `).bind(...params).all<{
+        `).bind(...params, activeCutoff, activeCutoff).all<{
           id: string;
           source: SourceType;
           url: string;
           published_at: number | null;
+          crawled_at: number;
           evidence: string | null;
         }>();
         articles = fallbackRows.results ?? [];
       }
 
-      if (articles.length === 0) continue;
+      const freshArticles = articles.filter(
+        (a) => (now - (a.published_at ?? a.crawled_at)) <= SEAL_WINDOW_SECONDS || (now - a.crawled_at) <= SEAL_WINDOW_SECONDS
+      );
+      if (freshArticles.length === 0) continue;
+      articles = freshArticles;
+
+      const earliestArticleTime = Math.min(...articles.map((a) => a.published_at ?? a.crawled_at ?? now));
+      let clusterId = baseClusterId;
+      let clusterCreatedAt = Math.min(existingCluster?.created_at ?? earliestArticleTime, earliestArticleTime);
+
+      if (isBaseSealed) {
+        const waveSuffix = `w${Math.floor(now / SEAL_WINDOW_SECONDS)}`;
+        clusterId = makeClusterId(deriveStableClusterId(entityIds, waveSuffix));
+        const waveRow = await db.prepare('SELECT created_at FROM clusters WHERE id = ? LIMIT 1').bind(clusterId).first<{ created_at: number }>();
+        clusterCreatedAt = waveRow?.created_at ?? earliestArticleTime;
+      }
+
+      // Check legacy non-deterministic cluster for translation migration
+      const legacyRow = await db.prepare(
+        `SELECT id FROM clusters WHERE label = ? AND id != ? AND id LIKE 'cluster_comm_%' AND status != 'SEALED' LIMIT 1`
+      ).bind(label, clusterId).first<{ id: string }>();
+
+      if (legacyRow) {
+        const migrated = await migrateTranslations(db, makeClusterId(legacyRow.id), clusterId);
+        if (migrated) translationsMigrated++;
+        await db.prepare('DELETE FROM cluster_articles WHERE cluster_id = ?').bind(legacyRow.id).run();
+        await db.prepare('DELETE FROM clusters WHERE id = ?').bind(legacyRow.id).run();
+      }
 
       const sources = articles.map((a) => a.source);
-      const publishedTimes = articles
-        .map((a) => a.published_at)
-        .filter((t): t is number => t !== null);
+      const publishedTimes = articles.map((a) => a.published_at).filter((t): t is number => t !== null);
 
       let evidenceCount = 0;
       for (const a of articles) {
@@ -143,11 +156,6 @@ export class ClusterBuilder {
           } catch {}
         }
       }
-
-      const existingCluster = await db.prepare(
-        'SELECT created_at FROM clusters WHERE id = ? LIMIT 1'
-      ).bind(clusterId).first<{ created_at: number }>();
-      const clusterCreatedAt = existingCluster?.created_at ?? Math.floor(Date.now() / 1000);
 
       const scoreInput = {
         sources,
@@ -160,26 +168,18 @@ export class ClusterBuilder {
       };
 
       const scoreComp = this.scorer.computeScore(scoreInput);
-      const status: CardStatus = this.scorer.determineStatus(scoreInput);
-
-      // Determine dynamic topic tags based on label and top entities
-      const textForTag = `${label} ${topEntities.join(' ')}`.toLowerCase();
-      const tags: string[] = ['AI'];
-      if (textForTag.includes('system') || textForTag.includes('model') || textForTag.includes('route') || textForTag.includes('bench')) {
-        tags.push('System Design');
-      }
-      if (textForTag.includes('api') || textForTag.includes('backend') || textForTag.includes('database') || textForTag.includes('provider')) {
-        tags.push('Backend');
-      }
+      const status: CardStatus = this.scorer.determineStatus(scoreInput, 'LEAD', now, scoreComp.finalScore);
+      const tags = determineClusterTags(label, topEntities);
 
       await upsertCluster(db, {
         id: clusterId,
         label,
-        topic_tags: JSON.stringify(Array.from(new Set(tags))),
+        topic_tags: JSON.stringify(tags),
         score: scoreComp.finalScore,
         status,
         article_count: articles.length,
         source_count: new Set(sources).size,
+        created_at: clusterCreatedAt,
       });
 
       for (const art of articles) {

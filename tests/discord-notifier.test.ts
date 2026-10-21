@@ -93,9 +93,12 @@ describe('Discord Notifier & Anti-Spam Gate', () => {
     const body = JSON.parse(callArgs[1].body);
     expect(body.username).toBe('Radar Content Bot');
     expect(body.embeds[0].title).toBe('🎯 [READY] Agentic Consensus on Edge SQLite');
+    expect(body.embeds[0].url).toBe('https://radar-content.pages.dev/?card=cluster_ai_1');
     expect(body.embeds[0].fields[0].value).toContain('Score: 85/100');
     expect(body.embeds[0].fields[1].value).toContain('70% latency reduction');
     expect(body.embeds[0].fields[2].value).toContain('Write contention');
+    expect(body.embeds[0].fields[3].value).toContain('[X: Evaluating consensus on D1](https://x.com/karpathy/status/100)');
+    expect(body.embeds[0].fields[4].value).toContain('[Mở Thẻ Phân Tích Toàn Diện](https://radar-content.pages.dev/?card=cluster_ai_1)');
   });
 
   it('notifyPromotedClusters enforces anti-spam gates: filters low score, non-T1 sources, and deduplicates', async () => {

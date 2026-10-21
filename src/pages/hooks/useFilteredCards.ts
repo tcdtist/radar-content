@@ -3,8 +3,6 @@ import { ScoredIntelligenceCard } from '../../lib/db/types';
 import { SourceTier } from '../../lib/scoring/source-tiers';
 import { getHighestTierBadge } from '../utils/tier-badge';
 
-// Rolling 30-day cutoff for active signals (SAVED and WRITTEN cards are immune)
-const ROLLING_WINDOW_SECONDS = 30 * 86400;
 
 interface UseFilteredCardsParams {
   cards: ScoredIntelligenceCard[];
@@ -81,15 +79,7 @@ export function useFilteredCards({
   };
 
   const filteredCards = useMemo(() => {
-    const rollingCutoff = Math.floor(Date.now() / 1000) - ROLLING_WINDOW_SECONDS;
-    let result = cards.filter(
-      (c) =>
-        c.id.startsWith('clu_mock_') ||
-        c.status === 'SAVED' ||
-        c.status === 'WRITTEN' ||
-        c.created_at >= rollingCutoff ||
-        Boolean(c.sources?.some((s) => (s.published_at || 0) >= rollingCutoff))
-    );
+    let result = [...cards];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -114,7 +104,7 @@ export function useFilteredCards({
               : null;
 
       if (targetTier) {
-        result = result.filter((c) => getHighestTierBadge(c.sources).tier === targetTier);
+        result = result.filter((c) => getHighestTierBadge(c).tier === targetTier);
       }
     }
 

@@ -74,8 +74,19 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
   const handleSync = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
+    const baselineTopCardId = cards[0]?.id;
     const baselineCardCount = cards.length;
     const baselineClusterCount = stats.totalClusters;
+    const baselineArticleCount = stats.totalArticles;
+
+    const hasDataChanged = (latestCards: typeof cards, latestStats: typeof stats) => {
+      return (
+        latestCards.length > baselineCardCount ||
+        latestStats.totalClusters !== baselineClusterCount ||
+        latestStats.totalArticles !== baselineArticleCount ||
+        (latestCards.length > 0 && latestCards[0]?.id !== baselineTopCardId)
+      );
+    };
 
     try {
       await triggerCrawl();
@@ -89,14 +100,14 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
       setStats(postCrawlStats);
       setCards(postCrawlCards);
 
-      // If new cards or clusters arrived immediately, finish early
-      if (postCrawlCards.length > baselineCardCount || postCrawlStats.totalClusters > baselineClusterCount) {
+      // If new cards, clusters, or top items arrived immediately, finish early
+      if (hasDataChanged(postCrawlCards, postCrawlStats)) {
         return;
       }
 
-      // Smart polling: check every 10s up to 6 times (~60s max) for background LLM processing
-      const maxAttempts = 6;
-      const pollIntervalMs = 10000;
+      // Quick polling: check every 3s up to 5 times (max 15s) for background LLM processing
+      const maxAttempts = 5;
+      const pollIntervalMs = 3000;
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
@@ -111,7 +122,7 @@ export function useIntelligenceFeed({ topic, status, sort, isAdmin }: UseIntelli
         setStats(latestStats);
         setCards(latestCards);
 
-        if (latestCards.length > baselineCardCount || latestStats.totalClusters > baselineClusterCount) {
+        if (hasDataChanged(latestCards, latestStats)) {
           break;
         }
       }

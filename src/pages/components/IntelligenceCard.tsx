@@ -20,8 +20,8 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
     )
   ).slice(0, 2);
 
-  const highestTier = getHighestTierBadge(card.sources);
-  const freshness = getCardFreshnessInfo(card);
+  const highestTier = card.highest_tier || getHighestTierBadge(card);
+  const freshness = card.freshness || getCardFreshnessInfo(card);
 
   return (
     <div
@@ -55,6 +55,21 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
           </div>
 
           <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+            {card.status === 'SEALED' && (
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  padding: '0.15rem 0.4rem',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-muted)',
+                  fontWeight: 600,
+                }}
+              >
+                DEEP DIVE
+              </span>
+            )}
             <span className={`badge ${highestTier.className}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
               {highestTier.emoji} {highestTier.label}
             </span>

@@ -1,4 +1,5 @@
 import { MOCK_INTELLIGENCE_CARDS } from '../data/mock-cards';
+import { computeCardFreshness, computeCardHighestTier } from '../scoring/card-metadata';
 import { CardStatus, ClusterId, makeClusterId, ScoredIntelligenceCard, SourceType } from './types';
 
 /**
@@ -124,5 +125,10 @@ export async function queryCardById(
       published_at: a.published_at,
       crawled_at: a.crawled_at,
     })),
+    freshness: computeCardFreshness(clusterRow.created_at, articles),
+    highest_tier: computeCardHighestTier(articles.map((a) => ({
+      source: (a.source as SourceType) || 'rss',
+      url: a.url,
+    }))),
   };
 }

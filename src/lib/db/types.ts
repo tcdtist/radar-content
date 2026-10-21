@@ -2,6 +2,8 @@
  * Database type definitions and branded IDs for Radar Content.
  */
 
+import type { SourceTier } from '../scoring/source-tiers';
+
 export type ArticleId = string & { readonly __brand: unique symbol };
 export type ExtractionId = string & { readonly __brand: unique symbol };
 export type EntityId = string & { readonly __brand: unique symbol };
@@ -13,7 +15,7 @@ export const makeEntityId = (id: string): EntityId => id as EntityId;
 export const makeClusterId = (id: string): ClusterId => id as ClusterId;
 
 export type SourceType = 'reddit' | 'hn' | 'x' | 'rss' | 'lobsters';
-export type CardStatus = 'LEAD' | 'READY' | 'SAVED' | 'WRITTEN' | 'DISMISSED';
+export type CardStatus = 'LEAD' | 'READY' | 'SAVED' | 'WRITTEN' | 'DISMISSED' | 'SEALED';
 export type EntityType = 'technology' | 'person' | 'company';
 
 export interface ArticleRecord {
@@ -95,6 +97,22 @@ export interface ScoredIntelligenceCard {
     published_at: number | null;
     crawled_at?: number | null;
   }>;
+  freshness?: {
+    latestPublishedAt: number;
+    cardAgeHours: number;
+    isNewlyEmerged: boolean;
+    hasFreshSourceUpdate: boolean;
+    badge: 'NEW' | null;
+    relativeTimeText: string;
+    tooltipText: string;
+    updateTooltipText?: string | null;
+  };
+  highest_tier?: {
+    emoji: string;
+    label: string;
+    className: string;
+    tier: SourceTier;
+  };
 }
 
 export interface CardTranslation {

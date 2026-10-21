@@ -5,8 +5,8 @@ export const Footer: React.FC = () => {
   return (
     <footer
       style={{
-        marginTop: '3rem',
-        paddingTop: '1.5rem',
+        marginTop: 'auto',
+        paddingTop: '2rem',
         paddingBottom: '2.5rem',
         borderTop: '1px solid var(--bg-tertiary)',
         fontSize: '0.82rem',

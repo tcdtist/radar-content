@@ -77,3 +77,47 @@ export function formatDateTime(
     return date.toLocaleDateString('en-GB');
   }
 }
+
+/**
+ * Format dynamic date window badge from a list of intelligence cards.
+ * Example: "14/10 - Today" or "Last 7 Days".
+ */
+export function formatDateWindow(
+  cards?: Array<{ created_at?: number; sources?: Array<{ published_at?: number | null }> }>,
+  timeZone: string = 'Asia/Ho_Chi_Minh'
+): string {
+  if (!cards || cards.length === 0) {
+    return 'Last 7 Days';
+  }
+
+  let earliestSec = Infinity;
+  for (const c of cards) {
+    if (c.created_at && c.created_at > 0) {
+      earliestSec = Math.min(earliestSec, c.created_at);
+    }
+    if (c.sources) {
+      for (const s of c.sources) {
+        if (s.published_at && s.published_at > 0) {
+          earliestSec = Math.min(earliestSec, s.published_at);
+        }
+      }
+    }
+  }
+
+  if (earliestSec === Infinity) {
+    return 'Last 7 Days';
+  }
+
+  const timeMs = earliestSec > 1e11 ? earliestSec : earliestSec * 1000;
+  const d = new Date(timeMs);
+  try {
+    const day = d.toLocaleDateString('en-GB', { timeZone, day: '2-digit' });
+    const month = d.toLocaleDateString('en-GB', { timeZone, month: '2-digit' });
+    return `${day}/${month} - Today`;
+  } catch {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month} - Today`;
+  }
+}
+
