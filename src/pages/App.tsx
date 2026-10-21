@@ -15,6 +15,7 @@ import { useIntelligenceFeed } from './hooks/useIntelligenceFeed';
 import { useMobileScrollPersistence } from './hooks/useMobileScrollPersistence';
 import { useTheme } from './hooks/useTheme';
 import { useUrlNavigation } from './hooks/useUrlNavigation';
+import { formatDateWindow } from './utils/date-format';
 
 export const App: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
@@ -136,6 +137,7 @@ export const App: React.FC = () => {
         onSearchChange={setSearchQuery}
         activeTierFilter={activeTierFilter}
         onTierFilterChange={setActiveTierFilter}
+        dateWindowLabel={formatDateWindow(cards)}
       />
 
       <main>

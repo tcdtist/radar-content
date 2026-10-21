@@ -24,8 +24,17 @@ export function getTierBadge(source: SourceType, url?: string): TierBadgeInfo {
   return TIER_BADGE_MAP[config.tier];
 }
 
-/** Get the highest tier badge across all sources in a card */
-export function getHighestTierBadge(sources?: Array<{ source: SourceType; url?: string }>): TierBadgeInfo {
+/** Get the highest tier badge across all sources in a card (precomputed on backend) */
+export function getHighestTierBadge(
+  cardOrSources?:
+    | { highest_tier?: TierBadgeInfo; sources?: Array<{ source: SourceType; url?: string }> }
+    | Array<{ source: SourceType; url?: string }>
+): TierBadgeInfo {
+  if (!cardOrSources) return TIER_BADGE_MAP[SourceTier.T3_REFERENCE];
+  if (!Array.isArray(cardOrSources) && cardOrSources.highest_tier) {
+    return cardOrSources.highest_tier;
+  }
+  const sources = Array.isArray(cardOrSources) ? cardOrSources : cardOrSources.sources;
   if (!sources || sources.length === 0) return TIER_BADGE_MAP[SourceTier.T3_REFERENCE];
   const tiers = sources.map((s) => getSourceTier(s.source, s.url).tier);
   if (tiers.includes(SourceTier.T1_AUTHORITY)) return TIER_BADGE_MAP[SourceTier.T1_AUTHORITY];

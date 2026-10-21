@@ -33,7 +33,7 @@ max_batch_timeout = 30
 # id = "placeholder"
 
 [vars]
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 CRAWL_SOURCES = "rss,hn,lobsters,reddit"
 CRAWL_FREQUENCY = "1"
 TIMEZONE = "Asia/Ho_Chi_Minh"

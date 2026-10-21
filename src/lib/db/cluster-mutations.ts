@@ -2,9 +2,10 @@ import { ArticleId, CardStatus, ClusterId, ClusterRecord } from './types';
 
 export async function upsertCluster(
   db: D1Database,
-  cluster: Omit<ClusterRecord, 'created_at' | 'updated_at'>
+  cluster: Omit<ClusterRecord, 'created_at' | 'updated_at'> & { created_at?: number }
 ): Promise<ClusterId> {
   const now = Math.floor(Date.now() / 1000);
+  const createdAt = cluster.created_at ?? now;
 
   await db.prepare(`
     INSERT INTO clusters (id, label, topic_tags, score, status, article_count, source_count, created_at, updated_at)
@@ -13,7 +14,7 @@ export async function upsertCluster(
       label = excluded.label,
       topic_tags = excluded.topic_tags,
       score = excluded.score,
-      status = CASE WHEN clusters.status IN ('SAVED', 'WRITTEN', 'DISMISSED') THEN clusters.status ELSE excluded.status END,
+      status = CASE WHEN clusters.status IN ('SAVED', 'WRITTEN', 'DISMISSED', 'SEALED') THEN clusters.status ELSE excluded.status END,
       article_count = excluded.article_count,
       source_count = excluded.source_count,
       updated_at = excluded.updated_at
@@ -25,7 +26,7 @@ export async function upsertCluster(
     cluster.status,
     cluster.article_count,
     cluster.source_count,
-    now,
+    createdAt,
     now
   ).run();
 
@@ -55,4 +56,20 @@ export async function updateCardStatus(
   `).bind(status, now, clusterId).run();
 
   return result.success;
+}
+
+export async function sealStaleClusters(
+  db: D1Database,
+  maxAgeSeconds = 7 * 86400,
+  minScoreFloor = 35
+): Promise<number> {
+  const cutoff = Math.floor(Date.now() / 1000) - maxAgeSeconds;
+  const result = await db.prepare(`
+    UPDATE clusters
+    SET status = 'SEALED', updated_at = unixepoch()
+    WHERE status IN ('READY', 'LEAD')
+      AND (created_at < ? OR score < ?)
+  `).bind(cutoff, minScoreFloor).run();
+
+  return result.meta?.changes ?? 0;
 }

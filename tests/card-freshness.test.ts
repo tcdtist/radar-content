@@ -34,7 +34,7 @@ describe('Card Freshness Temporal Logic & Badges (getCardFreshnessInfo)', () => 
     expect(info.badge).toBe('NEW');
   });
 
-  it('assigns UPDATED badge to older cards (>48h) with fresh sources within 72h', () => {
+  it('assigns blue dot update indicator (no UPDATED text badge) to older cards (>48h) with fresh sources within 72h', () => {
     const createdAt = fixedNow - 20 * 86400; // 20 days ago
     const latestSource = fixedNow - 2 * 3600; // 2 hours ago
     const card = {
@@ -49,7 +49,7 @@ describe('Card Freshness Temporal Logic & Badges (getCardFreshnessInfo)', () => 
 
     expect(info.isNewlyEmerged).toBe(false);
     expect(info.hasFreshSourceUpdate).toBe(true);
-    expect(info.badge).toBe('UPDATED');
+    expect(info.badge).toBeNull();
     expect(info.relativeTimeText).toBe('20d ago');
     expect(info.updateTooltipText).toBe('Updated 2h ago');
     expect(info.tooltipText).toContain('First emerged:');

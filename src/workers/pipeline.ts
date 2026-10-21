@@ -7,6 +7,7 @@ import { GeminiClient } from '../lib/llm/gemini-client';
 import { insertExtraction } from '../lib/db/extraction-queries';
 import { CrawlerRegistry } from '../lib/sources/crawler-registry';
 import { notifyPromotedClusters } from '../lib/notifications/discord-notifier';
+import { executeCardTranslation } from './translation-executor';
 
 export interface WorkerEnv {
   DB: D1Database;
@@ -102,18 +103,20 @@ export async function processArticlePipeline(
     await insertExtraction(env.DB, articleId, extraction);
 
     // 3. Extract and persist entities, link to article and build graph edges
-    await entityBuilder.processArticleEntities(env.DB, extraction.entities, articleId);
+    const entityIds = await entityBuilder.processArticleEntities(env.DB, extraction.entities, articleId);
 
     // 4. Mark article as processed
     await markArticleProcessed(env.DB, articleId);
 
-    // 5. Update topic clusters
+    // 5. Update topic clusters for affected entity community (capped to keep subrequests under limit)
     const clusterBuilder = new ClusterBuilder();
-    await clusterBuilder.buildClustersFromGraph(env.DB);
+    await clusterBuilder.buildClustersFromGraph(env.DB, entityIds);
 
     // 6. Notify newly promoted high-signal READY clusters (zero-spam, once-per-cluster)
     if (env.DISCORD_WEBHOOK_URL) {
-      await notifyPromotedClusters(env.DB, env.DISCORD_WEBHOOK_URL);
+      await notifyPromotedClusters(env.DB, env.DISCORD_WEBHOOK_URL, {
+        translateFn: (card) => executeCardTranslation(env, card),
+      });
     }
 
     return true;

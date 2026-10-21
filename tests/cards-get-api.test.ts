@@ -76,4 +76,15 @@ describe('Cards Detail Query API (GET /api/cards/:id)', () => {
     expect(data.success).toBe(false);
     expect(data.error).toContain('Card not found');
   });
+
+  it('enforces minScore >= 35 floor on GET /api/cards for active status', async () => {
+    const req = new Request('http://localhost/api/cards?status=READY,LEAD', { method: 'GET' });
+    const res = await worker.fetch(req, testEnv, mockCtx);
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { success: boolean; cards: Array<{ score: number }> };
+    expect(data.success).toBe(true);
+    expect(data.cards.length).toBeGreaterThan(0);
+    expect(data.cards.every((c) => c.score >= 35)).toBe(true);
+  });
 });

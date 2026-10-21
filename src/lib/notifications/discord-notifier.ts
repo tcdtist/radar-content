@@ -4,8 +4,12 @@ import {
   LinkedArticleExtraction,
   sendDiscordClusterAlert,
 } from './discord-formatter';
+import { resolveClusterTranslation } from './discord-translation-helper';
+import { CardToTranslate } from '../llm/translation-prompt';
+import { TranslatedCardContent } from '../llm/translator';
 
 export { sendDiscordClusterAlert } from './discord-formatter';
+export type { DiscordAlertOptions } from './discord-formatter';
 
 export interface NotificationResult {
   sentCount: number;
@@ -13,10 +17,15 @@ export interface NotificationResult {
   reason?: string;
 }
 
-/**
- * Ensure notified_clusters state tracking table exists in D1.
- * Prevents repeat spam notifications forever for the same cluster.
- */
+export interface NotifyClusterOptions {
+  minScore?: number;
+  limit?: number;
+  clusterId?: string;
+  force?: boolean;
+  appBaseUrl?: string;
+  translateFn?: (card: CardToTranslate) => Promise<TranslatedCardContent>;
+}
+
 export async function ensureNotifiedClustersTable(db: D1Database): Promise<void> {
   await db
     .prepare(
@@ -28,9 +37,6 @@ export async function ensureNotifiedClustersTable(db: D1Database): Promise<void>
     .run();
 }
 
-/**
- * Check if a cluster has already been notified.
- */
 export async function isClusterNotified(db: D1Database, clusterId: string): Promise<boolean> {
   await ensureNotifiedClustersTable(db);
   const row = await db
@@ -40,9 +46,6 @@ export async function isClusterNotified(db: D1Database, clusterId: string): Prom
   return Boolean(row);
 }
 
-/**
- * Mark a cluster as notified in D1.
- */
 export async function markClusterNotified(db: D1Database, clusterId: string): Promise<void> {
   await ensureNotifiedClustersTable(db);
   await db
@@ -51,16 +54,10 @@ export async function markClusterNotified(db: D1Database, clusterId: string): Pr
     .run();
 }
 
-/**
- * Anti-Spam Notification Engine:
- * 1. Checks for unnotified clusters in READY status with Score >= minScore (default 70).
- * 2. Requires at least one Tier 1/2 authority source (weight >= 0.75).
- * 3. Enforces strict limit (default 1) per cycle to prevent notification storms.
- */
 export async function notifyPromotedClusters(
   db: D1Database,
   webhookUrl?: string,
-  options: { minScore?: number; limit?: number } = {}
+  options: NotifyClusterOptions = {}
 ): Promise<NotificationResult> {
   if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
     return { sentCount: 0, reason: 'Invalid or missing Discord webhook URL' };
@@ -68,22 +65,47 @@ export async function notifyPromotedClusters(
 
   await ensureNotifiedClustersTable(db);
   const minScore = options.minScore ?? 70;
-  const limit = options.limit ?? 1;
 
-  const candidateRows = await db
-    .prepare(
-      `SELECT c.id, c.label, c.score, c.status, c.topic_tags, c.article_count, c.source_count
-       FROM clusters c
-       WHERE c.status = 'READY'
-         AND c.score >= ?
-         AND c.id NOT IN (SELECT cluster_id FROM notified_clusters)
-       ORDER BY c.score DESC
-       LIMIT ?`
-    )
-    .bind(minScore, limit)
-    .all<ClusterCandidate>();
+  if (!options.force) {
+    const cutoff = Math.floor(Date.now() / 1000) - 86400;
+    const sentTodayRow = await db
+      .prepare('SELECT count(*) as count FROM notified_clusters WHERE notified_at >= ?')
+      .bind(cutoff)
+      .first<{ count: number }>();
+    if ((sentTodayRow?.count ?? 0) >= 10) {
+      return { sentCount: 0, reason: 'Daily notification limit of 10 reached' };
+    }
+  }
 
-  const candidates = candidateRows.results ?? [];
+  let candidates: ClusterCandidate[] = [];
+  if (options.clusterId) {
+    const row = await db
+      .prepare(
+        `SELECT c.id, c.label, c.score, c.status, c.topic_tags, c.article_count, c.source_count
+         FROM clusters c
+         WHERE c.id = ?
+         LIMIT 1`
+      )
+      .bind(options.clusterId)
+      .first<ClusterCandidate>();
+    if (row) candidates = [row];
+  } else {
+    const candidateRows = await db
+      .prepare(
+        `SELECT c.id, c.label, c.score, c.status, c.topic_tags, c.article_count, c.source_count
+         FROM clusters c
+         WHERE c.status = 'READY'
+           AND c.created_at >= unixepoch() - 7 * 86400
+           AND c.score >= ?
+           AND c.id NOT IN (SELECT cluster_id FROM notified_clusters)
+         ORDER BY c.score DESC
+         LIMIT ?`
+      )
+      .bind(minScore, options.limit ?? 1)
+      .all<ClusterCandidate>();
+    candidates = candidateRows.results ?? [];
+  }
+
   if (candidates.length === 0) {
     return { sentCount: 0, reason: 'No new unnotified READY clusters meeting score threshold' };
   }
@@ -106,14 +128,17 @@ export async function notifyPromotedClusters(
 
     const articles = articleRows.results ?? [];
 
-    // Anti-spam condition: Must contain at least 1 Tier 1/2 source (weight >= 0.75)
-    const hasAuthority = articles.some((a) => getAuthorityWeight(a.source, a.url) >= 0.75);
-    if (!hasAuthority) {
-      continue;
+    if (!options.force) {
+      const hasAuthority = articles.some((a) => getAuthorityWeight(a.source, a.url) >= 0.75);
+      if (!hasAuthority) continue;
     }
 
     try {
-      const ok = await sendDiscordClusterAlert(webhookUrl, cluster, articles);
+      const translatedContent = await resolveClusterTranslation(db, cluster, articles, options.translateFn);
+      const ok = await sendDiscordClusterAlert(webhookUrl, cluster, articles, {
+        translatedContent,
+        appBaseUrl: options.appBaseUrl,
+      });
       if (ok) {
         await markClusterNotified(db, cluster.id);
         sentCount++;

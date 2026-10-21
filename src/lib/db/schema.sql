@@ -75,10 +75,14 @@ CREATE TABLE IF NOT EXISTS article_entities (
 CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source);
 CREATE INDEX IF NOT EXISTS idx_articles_processed ON articles(processed);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
+CREATE INDEX IF NOT EXISTS idx_articles_crawled ON articles(crawled_at);
 CREATE INDEX IF NOT EXISTS idx_clusters_status ON clusters(status);
 CREATE INDEX IF NOT EXISTS idx_clusters_score ON clusters(score DESC);
+CREATE INDEX IF NOT EXISTS idx_clusters_label ON clusters(label);
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
 CREATE INDEX IF NOT EXISTS idx_article_entities_entity ON article_entities(entity_id);
+CREATE INDEX IF NOT EXISTS idx_extractions_article_id ON extractions(article_id);
+CREATE INDEX IF NOT EXISTS idx_cluster_articles_article ON cluster_articles(article_id);
 
 -- Daily top-12 mock snapshot for guests
 CREATE TABLE IF NOT EXISTS mock_snapshot (

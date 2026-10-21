@@ -156,9 +156,12 @@ async function runE2ETests() {
 
       await saveScreenshot(page, `29-mobile-${mvp.name.toLowerCase()}-dashboard.png`);
 
-      // Open drawer on mobile
+      // Ensure cards are rendered before inspecting on mobile
+      await page.waitForSelector('[data-testid="intelligence-card"]', { timeout: 15000 });
       const inspectBtnMobile = await page.$('[data-testid="btn-inspect"]');
       if (inspectBtnMobile) {
+        await page.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }), inspectBtnMobile);
+        await new Promise((r) => setTimeout(r, 200));
         await inspectBtnMobile.click();
         await page.waitForSelector('.drawer-panel', { timeout: 5000 });
         await new Promise((r) => setTimeout(r, 400));
@@ -193,8 +196,11 @@ async function runE2ETests() {
         await saveScreenshot(page, `30-mobile-${mvp.name.toLowerCase()}-drawer.png`);
 
         // Close drawer
-        const closeBtnMobile = await page.$('[data-testid="btn-close-drawer"]');
-        if (closeBtnMobile) await closeBtnMobile.click();
+        const closeBtnMobile = await page.$('[data-testid="btn-close-drawer"], .drawer-panel button[aria-label="Close detail panel"], .drawer-panel button[aria-label="Đóng bảng chi tiết"]');
+        if (closeBtnMobile) {
+          await closeBtnMobile.click();
+          await page.waitForFunction(() => !document.querySelector('.drawer-panel'), { timeout: 3000 }).catch(() => {});
+        }
         await new Promise((r) => setTimeout(r, 300));
       }
     }

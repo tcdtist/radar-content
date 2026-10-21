@@ -162,4 +162,22 @@ describe('Cluster Queries (queryCards)', () => {
     expect(cards.length).toBe(1);
     expect(cards[0].id).toBe('c_fe');
   });
+
+  it('filters out cards with score below minScore floor', async () => {
+    const clusterHigh = { id: 'c_high', label: 'High Topic', topic_tags: '["AI"]', score: 55, status: 'READY', article_count: 1, source_count: 1, created_at: 100, updated_at: 100 };
+    const clusterLow = { id: 'c_low', label: 'Low Topic', topic_tags: '["AI"]', score: 22, status: 'READY', article_count: 1, source_count: 1, created_at: 100, updated_at: 100 };
+
+    const mockDb = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          all: async () => ({ results: [clusterHigh, clusterLow] }),
+        }),
+      }),
+    } as unknown as D1Database;
+
+    const cards = await queryCards(mockDb, { sort: 'newest', minScore: 35 });
+    expect(cards.length).toBe(1);
+    expect(cards[0].id).toBe('c_high');
+    expect(cards[0].score).toBe(55);
+  });
 });

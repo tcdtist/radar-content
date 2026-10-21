@@ -1,3 +1,5 @@
+import { computeCardFreshness, computeCardHighestTier } from '../scoring/card-metadata';
+import { ScoringEngine } from '../scoring/scoring-engine';
 import {
   ClusterRecord,
   makeClusterId,
@@ -17,7 +19,11 @@ export interface CardQueryFilters {
   sort?: 'score' | 'newest' | 'evidence';
   limit?: number;
   page?: number;
+  nowSeconds?: number;
+  minScore?: number;
 }
+
+const scoringEngine = new ScoringEngine();
 
 export async function queryCards(
   db: D1Database,
@@ -125,11 +131,21 @@ export async function queryCards(
       bestSummary = c.label || 'Technical Intelligence Signal';
     }
 
+    const articleTimes = articles.map((a) => a.published_at ?? a.crawled_at ?? 0).filter((t) => t > 0);
+    const latestActivityAt = articleTimes.length > 0 ? Math.max(...articleTimes) : c.created_at;
+    const score = filters.sort === 'newest'
+      ? c.score
+      : scoringEngine.computeDynamicVelocityScore(c.score, c.created_at, latestActivityAt, filters.nowSeconds);
+
+    if (filters.minScore !== undefined && score < filters.minScore) {
+      continue;
+    }
+
     cards.push({
       id: clusterId,
       label: c.label || 'Topic Discussion',
       topic_tags: tags,
-      score: c.score,
+      score,
       status: c.status,
       article_count: c.article_count,
       source_count: c.source_count,
@@ -149,7 +165,13 @@ export async function queryCards(
         published_at: a.published_at,
         crawled_at: a.crawled_at,
       })),
+      freshness: computeCardFreshness(c.created_at, articles, filters.nowSeconds),
+      highest_tier: computeCardHighestTier(articles),
     });
+  }
+
+  if (!filters.sort || filters.sort === 'score') {
+    cards.sort((a, b) => b.score - a.score);
   }
 
   return cards;

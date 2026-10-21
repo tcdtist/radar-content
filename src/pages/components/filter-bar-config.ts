@@ -5,6 +5,7 @@ export const TOPICS = ['all', 'AI', 'System Design', 'Backend', 'Frontend', 'Clo
 export const STATUS_OPTIONS = [
   { label: 'Active Signals', value: 'READY,LEAD' },
   { label: 'Ready for Draft', value: 'READY' },
+  { label: 'Deep Dives', value: 'SEALED' },
   { label: 'Saved', value: 'SAVED' },
   { label: 'Written', value: 'WRITTEN' },
   { label: 'Dismissed', value: 'DISMISSED' },

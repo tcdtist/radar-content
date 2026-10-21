@@ -22,6 +22,10 @@ cardsApp.get('/', async (c) => {
   const sort = (c.req.query('sort') as 'score' | 'newest' | 'evidence') || 'score';
   const page = c.req.query('page') ? parseInt(c.req.query('page')!, 10) : undefined;
   const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : undefined;
+  const minScoreParam = c.req.query('minScore');
+  const minScore = minScoreParam !== undefined
+    ? parseInt(minScoreParam, 10)
+    : (['READY,LEAD', 'READY', 'LEAD'].some((s) => status.includes(s)) ? 35 : undefined);
 
   const isAuth = await isRequestAuthorized(c);
   if (!isAuth) {
@@ -39,6 +43,9 @@ cardsApp.get('/', async (c) => {
     if (status) {
       const allowed = status.split(',').map((s) => s.trim().toUpperCase());
       mockList = mockList.filter((cd) => allowed.includes(cd.status));
+    }
+    if (minScore !== undefined) {
+      mockList = mockList.filter((cd) => cd.score >= minScore);
     }
     if (sort === 'newest') {
       mockList.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
@@ -67,14 +74,14 @@ cardsApp.get('/', async (c) => {
   }
 
   try {
-    const cards = await queryCards(c.env.DB, { topic, status, sort, page, limit });
+    const cards = await queryCards(c.env.DB, { topic, status, sort, page, limit, minScore });
     return c.json({
       success: true,
       cards,
       isMock: false,
       page: page || 1,
       limit: limit || 50,
-      filters: { topic, status, sort },
+      filters: { topic, status, sort, minScore },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

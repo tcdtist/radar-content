@@ -173,5 +173,19 @@ describe('ScoringEngine', () => {
     expect(freshScore.finalScore).toBeGreaterThan(oldScore.finalScore);
     expect(oldScore.finalScore).toBeLessThan(30);
   });
+
+  it('seals clusters when calculated score is below 35 floor', () => {
+    const input = {
+      sources: ['reddit'] as SourceType[],
+      evidenceCount: 1,
+      claimCount: 2,
+      totalEngagement: 50,
+      publishedAtTimestamps: [],
+    };
+
+    expect(engine.determineStatus(input, 'LEAD', Math.floor(Date.now() / 1000), 22)).toBe('SEALED');
+    expect(engine.determineStatus(input, 'LEAD', Math.floor(Date.now() / 1000), 34)).toBe('SEALED');
+    expect(engine.determineStatus(input, 'LEAD', Math.floor(Date.now() / 1000), 35)).toBe('LEAD');
+  });
 });
 

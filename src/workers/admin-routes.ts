@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
+import { sealStaleClusters } from '../lib/db/cluster-mutations';
 import { getLatestMockSnapshot, syncTop12MockCards } from '../lib/db/mock-snapshot-queries';
 import { pruneStaleData } from '../lib/db/prune-queries';
 import { notifyPromotedClusters } from '../lib/notifications/discord-notifier';
+import { executeCardTranslation } from './translation-executor';
 import { requireAdmin } from './auth-routes';
 import { WorkerEnv } from './pipeline';
 
@@ -38,15 +40,25 @@ adminApp.post('/prune', async (c) => {
 });
 
 /**
- * Manually trigger high-signal Discord notification check
+ * Manually trigger high-signal Discord notification check (or test specific cluster)
  */
 adminApp.post('/notify-discord', async (c) => {
   const webhookUrl = c.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
     return c.json({ success: false, error: 'DISCORD_WEBHOOK_URL is not configured' }, 400);
   }
+  const minScoreParam = c.req.query('minScore');
+  const clusterId = c.req.query('clusterId') || undefined;
+  const force = c.req.query('force') === 'true';
+  const minScore = minScoreParam ? parseInt(minScoreParam, 10) : 70;
   try {
-    const result = await notifyPromotedClusters(c.env.DB, webhookUrl);
+    const result = await notifyPromotedClusters(c.env.DB, webhookUrl, {
+      minScore,
+      limit: 1,
+      clusterId,
+      force,
+      translateFn: (card) => executeCardTranslation(c.env, card),
+    });
     return c.json({ success: true, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -98,6 +110,7 @@ export async function runDailyAdminSyncIfNeeded(env: WorkerEnv): Promise<{ synce
   }
 
   console.log(`[AdminSync] First admin visit of the day (${today}). Running top-12 snapshot and auto-prune...`);
+  await sealStaleClusters(env.DB);
   const snapshotResult = await syncTop12MockCards(env.DB, today);
   await pruneStaleData(env.DB);
   await triggerGitHubMockSync(env);

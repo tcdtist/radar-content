@@ -30,24 +30,46 @@ function parseJsonArray(raw: string | null): string[] {
   }
 }
 
+export interface DiscordAlertOptions {
+  translatedContent?: {
+    summary?: string;
+    evidence?: string[];
+    counter?: string[];
+  };
+  appBaseUrl?: string;
+}
+
 /**
  * Format and dispatch Discord Webhook embed for a newly promoted READY cluster.
  */
 export async function sendDiscordClusterAlert(
   webhookUrl: string,
   cluster: ClusterCandidate,
-  articles: LinkedArticleExtraction[]
+  articles: LinkedArticleExtraction[],
+  options: DiscordAlertOptions = {}
 ): Promise<boolean> {
-  const summary = articles.find((a) => a.summary)?.summary || cluster.label;
+  const appBaseUrl = options.appBaseUrl || 'https://radar-content.pages.dev';
+  const cardUrl = `${appBaseUrl}/?card=${encodeURIComponent(cluster.id)}`;
+
+  const trans = options.translatedContent;
+  const summary = trans?.summary || articles.find((a) => a.summary)?.summary || cluster.label;
+
   const allEvidence = articles.flatMap((a) => parseJsonArray(a.evidence));
   const allCounters = articles.flatMap((a) => parseJsonArray(a.counter));
-  const topEvidence = Array.from(new Set(allEvidence)).slice(0, 2);
-  const topCounters = Array.from(new Set(allCounters)).slice(0, 2);
 
-  const sourcesList = articles
-    .map((a) => (a.author ? `${a.author} (${a.source})` : a.source))
-    .slice(0, 3)
-    .join(', ');
+  const topEvidence = trans?.evidence && trans.evidence.length > 0
+    ? trans.evidence.slice(0, 2)
+    : Array.from(new Set(allEvidence)).slice(0, 2);
+
+  const topCounters = trans?.counter && trans.counter.length > 0
+    ? trans.counter.slice(0, 2)
+    : Array.from(new Set(allCounters)).slice(0, 2);
+
+  const sourceItems = articles.slice(0, 3).map((a) => {
+    const authorStr = a.author ? ` (${a.author})` : '';
+    const titleStr = a.title ? a.title.slice(0, 50) : a.source;
+    return a.url ? `• [${a.source.toUpperCase()}: ${titleStr}](${a.url})${authorStr}` : `• ${a.source}${authorStr}`;
+  });
 
   const fields = [
     {
@@ -73,24 +95,31 @@ export async function sendDiscordClusterAlert(
     });
   }
 
-  if (sourcesList) {
+  if (sourceItems.length > 0) {
     fields.push({
       name: '🌐 Nguồn Thảo Luận',
-      value: sourcesList,
+      value: sourceItems.join('\n'),
       inline: false,
     });
   }
+
+  fields.push({
+    name: '🔗 Chi Tiết Radar Content',
+    value: `👉 [Mở Thẻ Phân Tích Toàn Diện](${cardUrl})`,
+    inline: false,
+  });
 
   const payload = {
     username: 'Radar Content Bot',
     embeds: [
       {
         title: `🎯 [READY] ${cluster.label}`,
+        url: cardUrl,
         description: summary.slice(0, 300),
         color: 3066993, // Emerald green (0x2ECC71)
         fields,
         footer: {
-          text: 'Radar Content • Cảnh Báo Chủ Đề Chất Lượng Cao (Anti-Spam Filter)',
+          text: 'Radar Content • Cảnh Báo Chủ Đề Kỹ Thuật (Tiếng Việt)',
         },
         timestamp: new Date().toISOString(),
       },
