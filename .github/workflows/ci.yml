@@ -108,13 +108,6 @@ jobs:
           html_size=$(wc -c < dist/index.html | tr -d ' ')
           echo "Vite build successful. HTML size: ${html_size} bytes."
 
-      - name: Cache SPA Distribution Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vite-dist
-          path: dist/
-          retention-days: 1
-
   e2e:
     name: E2E Interactive Browser Testing (Chrome)
     needs: [build]
@@ -132,11 +125,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download Cached SPA Build
-        uses: actions/download-artifact@v4
-        with:
-          name: vite-dist
-          path: dist
+      - name: Build SPA Bundle
+        run: npm run build
 
       - name: Start Vite Preview Server
         run: |
@@ -160,6 +150,7 @@ jobs:
 
       - name: Upload Test Screenshots
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: e2e-screenshots

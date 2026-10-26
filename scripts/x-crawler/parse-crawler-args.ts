@@ -49,30 +49,42 @@ export function parseCrawlerArgs(argv = process.argv.slice(2)): CrawlerOptions {
     includeFollowing: true,
     dryRun: false,
     mock: false,
-    apiUrl: 'http://localhost:8787/api/ingest',
+    apiUrl: process.env.API_URL || 'http://localhost:8787/api/ingest',
     processNow: false,
     authToken: process.env.X_AUTH_TOKEN,
     ct0: process.env.X_CT0,
   };
 
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
     if (arg.startsWith('--seeds=') || arg.startsWith('--seed=')) {
       options.seedUsers = parseSeedUsers(arg.split('=')[1]);
       options.seedUser = options.seedUsers[0];
+    } else if (arg === '--seed' || arg === '--seeds') {
+      options.seedUsers = parseSeedUsers(argv[++i]);
+      options.seedUser = options.seedUsers[0];
     } else if (arg.startsWith('--limit=')) {
       options.limit = parseInt(arg.split('=')[1], 10) || 5;
+    } else if (arg === '--limit') {
+      options.limit = parseInt(argv[++i], 10) || 5;
     } else if (arg === '--dry-run') {
       options.dryRun = true;
     } else if (arg === '--mock') {
       options.mock = true;
     } else if (arg.startsWith('--api-url=')) {
       options.apiUrl = arg.split('=')[1];
+    } else if (arg === '--api-url') {
+      options.apiUrl = argv[++i];
     } else if (arg === '--process-now') {
       options.processNow = true;
     } else if (arg.startsWith('--auth-token=')) {
       options.authToken = arg.split('=')[1];
+    } else if (arg === '--auth-token') {
+      options.authToken = argv[++i];
     } else if (arg.startsWith('--ct0=')) {
       options.ct0 = arg.split('=')[1];
+    } else if (arg === '--ct0') {
+      options.ct0 = argv[++i];
     } else if (arg === '--skip-seed' || arg === '--no-seed') {
       options.includeSeed = false;
     } else if (arg === '--direct-only') {

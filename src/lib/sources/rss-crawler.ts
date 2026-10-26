@@ -1,5 +1,4 @@
 import { RawSourcePost, SourceCrawler } from './source-types';
-import { fetchArticleContent } from './content-reader';
 import { CURATED_TECH_FEEDS, RssFeedConfig } from './rss-feed-registry';
 
 interface ParsedFeedItem {
@@ -68,40 +67,20 @@ export class RssCrawler implements SourceCrawler {
 
     const xml = await res.text();
     const items = this.parseXmlItems(xml).slice(0, limit);
-    const posts: RawSourcePost[] = [];
-
-    const BATCH_SIZE = 3;
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      const batch = items.slice(i, i + BATCH_SIZE);
-      const batchPosts = await Promise.all(
-        batch.map(async (item) => {
-          let bodyText = item.description;
-
-          // If description is brief, fetch rich markdown via content reader
-          if (bodyText.length < 400 && item.url.startsWith('http')) {
-            const deepContent = await fetchArticleContent(item.url, { timeoutMs: 5000, maxCharacters: 4000 });
-            if (deepContent) {
-              bodyText = deepContent;
-            }
-          }
-
-          return {
-            source: 'rss' as const,
-            sourceId: `rss_${this.hashId(item.guid || item.url)}`,
-            url: item.url,
-            title: `[${feed.name}] ${item.title}`,
-            body: bodyText.length > 0 ? bodyText.slice(0, 4500) : null,
-            author: feed.name,
-            publishedAt: item.publishedAt,
-            engagementScore: 100, // Curated editorial source default score
-            commentsCount: 0,
-          };
-        })
-      );
-      posts.push(...batchPosts);
-    }
-
-    return posts;
+    return items.map((item) => {
+      const bodyText = item.description.trim();
+      return {
+        source: 'rss' as const,
+        sourceId: `rss_${this.hashId(item.guid || item.url)}`,
+        url: item.url,
+        title: `[${feed.name}] ${item.title}`,
+        body: bodyText.length > 0 ? bodyText.slice(0, 4500) : null,
+        author: feed.name,
+        publishedAt: item.publishedAt,
+        engagementScore: 100, // Curated editorial source default score
+        commentsCount: 0,
+      };
+    });
   }
 
   parseXmlItems(xml: string): ParsedFeedItem[] {

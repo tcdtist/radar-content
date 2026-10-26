@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getUnprocessedArticles } from '../lib/db/article-queries';
 import { getDashboardStats } from '../lib/db/cluster-queries';
+import { syncTop12MockCards } from '../lib/db/mock-snapshot-queries';
 import { getActiveSlotsForFrequency, getLocalHour, shouldExecuteCrawl } from '../lib/sources/schedule-manager';
 import { executeScheduledCrawl, processArticlePipeline, QueueMessageBody, WorkerEnv } from './pipeline';
 import { handleCheckExistingUrls, handleIngestPosts, IngestRequestPayload } from './ingest-handler';
@@ -10,6 +11,7 @@ import { authApp, requireAdmin } from './auth-routes';
 import { adminApp } from './admin-routes';
 import { cardsApp } from './cards-routes';
 import { triggerCreatorRadarScan } from './creator-radar-trigger';
+import { triggerXCrawlerDispatch } from './x-crawler-dispatch';
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
 
@@ -45,6 +47,7 @@ app.get('/api/stats', requireAdmin, async (c) => {
 // Manual trigger for full pipeline (crawl + auto-enqueue for Gemini) - Requires Admin
 app.post('/api/crawl/trigger', requireAdmin, async (c) => {
   await executeScheduledCrawl(c.env);
+  await syncTop12MockCards(c.env.DB);
   return c.json({ success: true, message: 'Crawl + enqueue completed.' });
 });
 
@@ -139,7 +142,7 @@ app.get('/api/schedule', (c) => {
 // Manual / external trigger for Creator Radar scan via GitHub Actions - Requires Admin
 app.post('/api/creator-radar/trigger', requireAdmin, async (c) => {
   const result = await triggerCreatorRadarScan(c.env);
-  return c.json(result, result.success ? 200 : (result.status as any));
+  return c.json(result, (result.success ? 200 : result.status) as 200 | 400 | 401 | 500);
 });
 
 export default {
@@ -165,6 +168,7 @@ export default {
 
     console.log('[Worker] Cron triggered: starting automated content crawl...');
     await executeScheduledCrawl(env);
+    await triggerXCrawlerDispatch(env).catch(() => {});
   },
 
   // Queue consumer — processes articles through Gemini
@@ -187,5 +191,6 @@ export default {
       }
       message.ack();
     }
+    await syncTop12MockCards(env.DB).catch(() => {});
   },
 };

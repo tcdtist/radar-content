@@ -1,0 +1,59 @@
+name: Automated X/Twitter Harvester
+
+on:
+  schedule:
+    # Runs 4 times a day: 00:00, 06:00, 12:00, 18:00 UTC (07:00, 13:00, 19:00, 01:00 UTC+7)
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [crawl-x]
+
+concurrency:
+  group: x-crawler-harvester
+  cancel-in-progress: true
+
+jobs:
+  harvest-x:
+    name: Harvest X Inner Circle & Ingest to Radar
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RADAR_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run X Harvester
+        env:
+          X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+          X_CT0: ${{ secrets.X_CT0 }}
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+          INGEST_API_KEY: ${{ secrets.ADMIN_SECRET }}
+          API_URL: https://your-worker-subdomain.workers.dev/api/ingest
+        run: |
+          npx tsx scripts/x-crawler/run-x-crawler.ts --limit 15 --process-now
+
+      - name: Commit cached roster updates if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -n $(git status --porcelain scripts/x-crawler/roster-cache.json) ]]; then
+            git add scripts/x-crawler/roster-cache.json
+            git commit -m "chore: update x-crawler roster cache [skip ci]"
+            git pull --rebase origin main
+            git push origin main
+            echo "Roster cache updated."
+          else
+            echo "No roster cache changes."
+          fi

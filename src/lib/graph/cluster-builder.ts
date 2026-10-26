@@ -63,7 +63,7 @@ export class ClusterBuilder {
       const isBaseSealed = Boolean(
         existingCluster && (
           existingCluster.status === 'SEALED' ||
-          (now - existingCluster.created_at) > SEAL_WINDOW_SECONDS
+          (now - existingCluster.created_at) > (SEAL_WINDOW_SECONDS - 2 * 86400)
         )
       );
 
