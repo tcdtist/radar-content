@@ -33,6 +33,9 @@ export const HIGH_AUTHORITY_DOMAINS: readonly string[] = [
   'deepseek.com',
   'research.google',
   'ai.meta.com',
+  'github.blog',
+  'deepmind.google',
+  'latent.space',
 ];
 
 /** Ecosystem developer platforms and release feeds elevated to T2 (weight: 0.75) */
@@ -42,6 +45,9 @@ export const ELEVATED_DOMAINS: readonly string[] = [
   'huggingface.co',
   'github.com', // GitHub Releases Atom feeds
   'pytorch.org',
+  'fly.io',
+  'astral.sh',
+  'mitchellh.com',
 ];
 
 // ── 3. Curated RSS/Atom Feeds ────────────────────────────────────────
@@ -59,14 +65,14 @@ export interface RssFeedConfig {
 
 const T1_AUTHORITY_FEEDS: RssFeedConfig[] = [
   {
-    name: 'Anthropic Research',
-    url: 'https://www.anthropic.com/feed',
-    defaultTopic: 'AI',
+    name: 'GitHub Blog',
+    url: 'https://github.blog/feed/',
+    defaultTopic: 'Engineering',
     tier: 'T1',
   },
   {
     name: 'OpenAI Blog',
-    url: 'https://openai.com/blog/rss.xml',
+    url: 'https://openai.com/news/rss.xml',
     defaultTopic: 'AI',
     tier: 'T1',
   },
@@ -82,22 +88,31 @@ const T1_AUTHORITY_FEEDS: RssFeedConfig[] = [
     defaultTopic: 'AI',
     tier: 'T1',
   },
+  {
+    name: 'Latent Space',
+    url: 'https://latent.space/feed',
+    defaultTopic: 'AI',
+    tier: 'T1',
+  },
+  {
+    name: 'Google DeepMind Blog',
+    url: 'https://deepmind.google/blog/rss.xml',
+    defaultTopic: 'AI',
+    tier: 'T1',
+  },
 ];
 
-// ── 3b. X/Twitter Inner Circle via RSSHub Bridge ─────────────────────
+// ── 3b. X/Twitter Inner Circle Reference ─────────────────────────────
+// Note: RSSHub public instances are frequently rate-limited/blocked.
+// Kept as reference; omitted from default active crawl to conserve subrequests.
 
-/** RSSHub public instances (tried in order for resilience) */
-const RSSHUB_INSTANCES = [
+export const RSSHUB_INSTANCES = [
   'https://rsshub.app',
   'https://rsshub.rssforever.com',
   'https://rss.fatpandac.com',
 ] as const;
 
-/**
- * Build RSS feed entries for X/Twitter Inner Circle accounts.
- * Uses RSSHub bridge: rsshub.app/twitter/user/{handle}
- */
-function buildXInnerCircleFeeds(): RssFeedConfig[] {
+export function buildXInnerCircleFeeds(): RssFeedConfig[] {
   return INNER_CIRCLE_X_SEEDS.map((handle) => ({
     name: `X: @${handle}`,
     url: `${RSSHUB_INSTANCES[0]}/twitter/user/${handle}`,
@@ -108,8 +123,6 @@ function buildXInnerCircleFeeds(): RssFeedConfig[] {
     ),
   }));
 }
-
-const T1_X_INNER_CIRCLE_FEEDS: RssFeedConfig[] = buildXInnerCircleFeeds();
 
 const T2_DEPTH_FEEDS: RssFeedConfig[] = [
   {
@@ -126,8 +139,26 @@ const T2_DEPTH_FEEDS: RssFeedConfig[] = [
   },
   {
     name: 'Supabase Blog',
-    url: 'https://supabase.com/blog/rss.xml',
+    url: 'https://supabase.com/rss.xml',
     defaultTopic: 'Backend',
+    tier: 'T2',
+  },
+  {
+    name: 'Fly.io Blog',
+    url: 'https://fly.io/blog/feed.xml',
+    defaultTopic: 'Cloud/DevOps',
+    tier: 'T2',
+  },
+  {
+    name: 'Astral Blog',
+    url: 'https://astral.sh/blog/rss.xml',
+    defaultTopic: 'Engineering',
+    tier: 'T2',
+  },
+  {
+    name: 'Mitchell Hashimoto',
+    url: 'https://mitchellh.com/feed.xml',
+    defaultTopic: 'System Design',
     tier: 'T2',
   },
   {
@@ -155,7 +186,6 @@ const T3_REFERENCE_FEEDS: RssFeedConfig[] = [
 
 export const CURATED_TECH_FEEDS: readonly RssFeedConfig[] = [
   ...T1_AUTHORITY_FEEDS,
-  ...T1_X_INNER_CIRCLE_FEEDS,
   ...T2_DEPTH_FEEDS,
   ...T3_REFERENCE_FEEDS,
 ];

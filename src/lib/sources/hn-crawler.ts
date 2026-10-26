@@ -33,25 +33,28 @@ export class HackerNewsCrawler implements SourceCrawler {
   }
 
   async fetchLatest(limit = 10): Promise<RawSourcePost[]> {
-    try {
-      // 1. Try Algolia Search for high-signal AI discussions
-      const algoliaPosts = await this.fetchAlgoliaAiStories(limit);
-      if (algoliaPosts.length > 0) {
-        return algoliaPosts;
-      }
-    } catch (err) {
-      console.warn('Algolia HN fetch failed, falling back to Firebase topstories:', err);
-    }
-
-    // 2. Fallback to Firebase topstories
+    // 1. Primary: Fetch real-time top stories from Firebase official API
     try {
       const topStoryIds = await this.fetchTopStoryIds(limit);
-      const postPromises = topStoryIds.map((id) => this.fetchItem(id));
-      const items = await Promise.all(postPromises);
+      if (topStoryIds.length > 0) {
+        const postPromises = topStoryIds.map((id) => this.fetchItem(id));
+        const items = await Promise.all(postPromises);
 
-      return items
-        .filter((item): item is HnItem => item !== null && !item.deleted && !item.dead)
-        .map((item) => this.normalizeItem(item));
+        const posts = items
+          .filter((item): item is HnItem => item !== null && !item.deleted && !item.dead)
+          .map((item) => this.normalizeItem(item));
+
+        if (posts.length > 0) {
+          return posts;
+        }
+      }
+    } catch (err) {
+      console.warn('Firebase HN topstories fetch failed, trying Algolia fallback:', err);
+    }
+
+    // 2. Fallback to Algolia search_by_date
+    try {
+      return await this.fetchAlgoliaAiStories(limit);
     } catch (err) {
       console.error('HackerNewsCrawler error:', err);
       return [];
@@ -59,8 +62,8 @@ export class HackerNewsCrawler implements SourceCrawler {
   }
 
   async fetchAlgoliaAiStories(limit: number): Promise<RawSourcePost[]> {
-    const query = 'DeepSeek OR Claude OR "coding agent" OR vLLM OR benchmark OR LLM';
-    const url = `${this.algoliaUrl}/search?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=${limit}`;
+    const query = 'AI OR LLM OR "coding agent" OR vLLM OR benchmark OR Claude OR DeepSeek';
+    const url = `${this.algoliaUrl}/search_by_date?query=${encodeURIComponent(query)}&tags=story&numericFilters=points>15&hitsPerPage=${limit}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Algolia status: ${res.status}`);
 

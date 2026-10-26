@@ -53,8 +53,33 @@ describe('Source Tiers', () => {
       expect(config.tier).toBe(SourceTier.T1_AUTHORITY);
     });
 
+    it('elevates RSS to T1 for Latent Space', () => {
+      const config = getSourceTier('rss', 'https://latent.space/feed');
+      expect(config.tier).toBe(SourceTier.T1_AUTHORITY);
+    });
+
+    it('elevates RSS to T1 for DeepMind blog', () => {
+      const config = getSourceTier('rss', 'https://deepmind.google/blog/rss.xml');
+      expect(config.tier).toBe(SourceTier.T1_AUTHORITY);
+    });
+
     it('elevates RSS to T2 for Vercel blog', () => {
       const config = getSourceTier('rss', 'https://vercel.com/atom');
+      expect(config.tier).toBe(SourceTier.T2_DEPTH);
+    });
+
+    it('elevates RSS to T2 for Fly.io blog', () => {
+      const config = getSourceTier('rss', 'https://fly.io/blog/feed.xml');
+      expect(config.tier).toBe(SourceTier.T2_DEPTH);
+    });
+
+    it('elevates RSS to T2 for Astral blog', () => {
+      const config = getSourceTier('rss', 'https://astral.sh/blog/rss.xml');
+      expect(config.tier).toBe(SourceTier.T2_DEPTH);
+    });
+
+    it('elevates RSS to T2 for Mitchell Hashimoto', () => {
+      const config = getSourceTier('rss', 'https://mitchellh.com/feed.xml');
       expect(config.tier).toBe(SourceTier.T2_DEPTH);
     });
 
