@@ -12,11 +12,14 @@ export const DetailCardHeader: React.FC<DetailCardHeaderProps> = ({ card }) => {
   const crawledDate =
     card.sources.find((s) => s.crawled_at)?.crawled_at || card.created_at;
 
-  const sourcesLabel =
-    card.sources
-      .map((s) => (s.author ? `${s.source.toUpperCase()}: ${s.author}` : s.source.toUpperCase()))
-      .slice(0, 3)
-      .join(' • ') || 'Multiple sources';
+  const uniqueAuthors = Array.from(
+    new Set(
+      card.sources
+        .map((s) => (s.author ? `${s.source.toUpperCase()}: ${s.author}` : s.source.toUpperCase()))
+        .filter(Boolean)
+    )
+  );
+  const sourcesLabel = uniqueAuthors.slice(0, 3).join(' • ') || 'Multiple sources';
 
   return (
     <div>
@@ -47,6 +50,9 @@ export const DetailCardHeader: React.FC<DetailCardHeaderProps> = ({ card }) => {
             borderColor: 'var(--accent-coral)',
             color: 'var(--accent-coral)',
             fontSize: '0.85rem',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            alignSelf: 'flex-start',
           }}
         >
           SCORE {card.score}

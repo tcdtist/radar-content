@@ -22,6 +22,12 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
 
   const highestTier = card.highest_tier || getHighestTierBadge(card);
   const freshness = card.freshness || getCardFreshnessInfo(card);
+  const distinctSourcesCount =
+    card.source_count > 0
+      ? card.source_count
+      : new Set(card.sources.map((s) => s.source)).size;
+  const threadCount = card.article_count || card.sources.length;
+  const evidenceCount = card.evidence.length;
 
   return (
     <div
@@ -29,84 +35,47 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
       data-testid="intelligence-card"
       style={{
         padding: '1.25rem',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        gap: '0.9rem',
         cursor: 'pointer',
       }}
       onClick={() => onSelect(card)}
     >
-      <div>
+      {/* Card Content Body: Header, Provenance, Title, Summary */}
+      <div className="card-body-section">
         {/* Card Header: Badges & Score */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="card-header-bar">
+          <div className="card-tags-list">
             <span className={`badge badge-${card.status.toLowerCase()}`}>{card.status}</span>
-            {freshness.badge === 'NEW' && (
-              <span className="badge" style={{ backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', borderColor: 'rgba(34, 197, 94, 0.3)', fontSize: '0.68rem', padding: '0.1rem 0.35rem' }}>
-                NEW
-              </span>
-            )}
+            {freshness.badge === 'NEW' && <span className="badge card-badge-new">NEW</span>}
             {card.topic_tags.slice(0, 2).map((tag) => (
-              <span key={tag} className="badge" style={{ backgroundColor: 'transparent', borderColor: 'var(--bg-tertiary)', color: 'var(--accent-bronze)' }}>
+              <span key={tag} className="badge card-tag-pill" title={`#${tag}`}>
                 #{tag}
               </span>
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-            {card.status === 'SEALED' && (
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  padding: '0.15rem 0.4rem',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-muted)',
-                  fontWeight: 600,
-                }}
-              >
-                DEEP DIVE
-              </span>
-            )}
+          <div className="card-score-group">
+            {card.status === 'SEALED' && <span className="card-badge-sealed">DEEP DIVE</span>}
             <span className={`badge ${highestTier.className}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
               {highestTier.emoji} {highestTier.label}
             </span>
-            <div
-              className="font-mono"
-              style={{
-                padding: '0.2rem 0.55rem',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: 'var(--bg-primary)',
-                border: '1px solid var(--accent-coral)',
-                color: 'var(--accent-coral)',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-              }}
-            >
+            <div className="font-mono card-score-box">
               SCORE {card.score}
             </div>
           </div>
         </div>
 
         {/* Source Provenance & Freshness Bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="card-provenance-bar">
+          <div className="card-author-list">
             {primaryAuthors.map((item, idx) => (
-              <span key={idx} className="font-mono" style={{ padding: '0.12rem 0.4rem', borderRadius: '4px', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
+              <span key={idx} className="font-mono card-author-pill" title={item}>
                 {item}
               </span>
             ))}
           </div>
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}
-            title={freshness.tooltipText}
-          >
+          <div className="card-freshness-group" title={freshness.tooltipText}>
             <ClockIcon size={12} color="var(--text-muted)" />
-            <span className="font-mono">
-              {freshness.relativeTimeText}
-            </span>
+            <span className="font-mono">{freshness.relativeTimeText}</span>
             {freshness.hasFreshSourceUpdate && (
               <span
                 style={{
@@ -124,34 +93,28 @@ export const IntelligenceCard: React.FC<IntelligenceCardProps> = ({ card, onSele
         </div>
 
         {/* Title */}
-        <h3 className="font-mono" style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: '0.5rem' }}>
+        <h3 className="font-mono card-title-line" title={card.label}>
           {card.label}
         </h3>
 
         {/* Summary snippet */}
-        <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <p className="card-summary-clamped">
           {card.summary}
         </p>
       </div>
 
-      {/* Metrics & Action Bar */}
-      <div>
-        <div
-          className="font-mono"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '0.72rem',
-            color: 'var(--text-muted)',
-            paddingTop: '0.75rem',
-            borderTop: '1px solid var(--bg-tertiary)',
-            marginBottom: '0.75rem',
-          }}
-        >
-          <span>{card.evidence.length} evidence pts</span>
-          <span>{card.sources.length} sources</span>
-          <span>{card.article_count} threads</span>
+      {/* Footer: Metrics & Action Bar */}
+      <div className="card-footer-section">
+        <div className="font-mono card-metrics-row">
+          <span title={`${evidenceCount} extracted evidence points`}>
+            {evidenceCount} {evidenceCount === 1 ? 'evidence pt' : 'evidence pts'}
+          </span>
+          <span title={`${distinctSourcesCount} distinct platform sources (e.g. X, HN, RSS)`}>
+            {distinctSourcesCount} {distinctSourcesCount === 1 ? 'source' : 'sources'}
+          </span>
+          <span title={`${threadCount} discussion threads / articles`}>
+            {threadCount} {threadCount === 1 ? 'thread' : 'threads'}
+          </span>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }} onClick={(e) => e.stopPropagation()}>

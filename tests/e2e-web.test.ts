@@ -93,5 +93,23 @@ ${card.sources.map((s) => `- [${s.source.toUpperCase()}] ${s.title}: ${s.url}`).
     expect(filterByTier('T2').length).toBe(1);
     expect(filterByTier('T3').length).toBe(1);
   });
+
+  it('differentiates distinct source platforms from discussion threads', () => {
+    const card = TEST_CARDS[0]; // has article_count: 14, source_count: 2
+    expect(card.article_count).toBe(14);
+    expect(card.source_count).toBe(2);
+
+    // Verify distinct platforms vs thread count logic
+    const distinctSourcesCount =
+      card.source_count > 0
+        ? card.source_count
+        : new Set(card.sources.map((s) => s.source)).size;
+    const threadCount = card.article_count || card.sources.length;
+
+    expect(distinctSourcesCount).toBe(2);
+    expect(threadCount).toBe(14);
+    expect(distinctSourcesCount).not.toBe(threadCount);
+  });
 });
+
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ensureNotifiedClustersTable,
   isClusterNotified,
+  isClusterStoryAlreadyNotified,
   markClusterNotified,
   notifyPromotedClusters,
 } from '../src/lib/notifications/discord-notifier';
@@ -172,5 +173,166 @@ describe('Discord Notifier & Anti-Spam Gate', () => {
     expect(res2.sentCount).toBe(0);
     expect(res2.reason).toContain('No new unnotified READY clusters');
     expect(fetchMock).toHaveBeenCalledTimes(1); // Still 1 call, zero repeat spam!
+  });
+
+  it('isClusterStoryAlreadyNotified detects duplicate by matching cluster label or lead article URL', async () => {
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((sql: string) => ({
+        run: vi.fn().mockResolvedValue({ success: true }),
+        bind: vi.fn().mockImplementation((...params: unknown[]) => ({
+          first: vi.fn().mockImplementation(async () => {
+            if (sql.includes('lower(trim(c.label)) = lower(trim(?))')) {
+              // Return match if label matches 'apple · ios, icloud+'
+              const targetLabel = String(params[1]).toLowerCase();
+              if (targetLabel.includes('apple')) return { 1: 1 };
+            }
+            if (sql.includes('a.url IN')) {
+              // Return match if URL is duplicate
+              const urls = params.slice(1).map(String);
+              if (urls.includes('https://x.com/AroraBhavyam/status/1')) return { 1: 1 };
+            }
+            return null;
+          }),
+        })),
+      })),
+    } as unknown as D1Database;
+
+    const clusterLabelDup = {
+      id: 'cluster_new_apple',
+      label: 'Apple · ios, icloud+',
+      score: 80,
+      status: 'READY',
+      topic_tags: '["AI"]',
+      article_count: 2,
+      source_count: 2,
+    };
+
+    const isDupByLabel = await isClusterStoryAlreadyNotified(mockDb, clusterLabelDup, []);
+    expect(isDupByLabel).toBe(true);
+
+    const clusterArticleDup = {
+      id: 'cluster_new_yc',
+      label: 'Bhavyam Arora · entrepreneur first',
+      score: 75,
+      status: 'READY',
+      topic_tags: '["AI"]',
+      article_count: 1,
+      source_count: 1,
+    };
+
+    const dupArticles = [
+      {
+        source: 'x' as const,
+        url: 'https://x.com/AroraBhavyam/status/1',
+        title: 'YC W27 closing soon',
+        author: '@AroraBhavyam',
+        summary: 'YC deadline.',
+        evidence: null,
+        counter: null,
+      },
+    ];
+
+    const isDupByArticle = await isClusterStoryAlreadyNotified(mockDb, clusterArticleDup, dupArticles);
+    expect(isDupByArticle).toBe(true);
+
+    const freshCluster = {
+      id: 'cluster_fresh_linux',
+      label: 'Linux Kernel · bcachefs',
+      score: 82,
+      status: 'READY',
+      topic_tags: '["System Design"]',
+      article_count: 2,
+      source_count: 1,
+    };
+
+    const freshArticles = [
+      {
+        source: 'rss' as const,
+        url: 'https://lwn.net/articles/fresh',
+        title: 'Bcachefs Updates',
+        author: 'Kent Overstreet',
+        summary: 'New file system updates.',
+        evidence: null,
+        counter: null,
+      },
+    ];
+
+    const isNotDup = await isClusterStoryAlreadyNotified(mockDb, freshCluster, freshArticles);
+    expect(isNotDup).toBe(false);
+  });
+
+  it('notifyPromotedClusters marks duplicate cluster as notified and skips sending webhook', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const notifiedSet = new Set<string>();
+
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((sql: string) => ({
+        run: vi.fn().mockResolvedValue({ success: true }),
+        bind: vi.fn().mockImplementation((...params: unknown[]) => ({
+          run: vi.fn().mockImplementation(async () => {
+            if (sql.includes('INSERT OR IGNORE INTO notified_clusters')) {
+              notifiedSet.add(String(params[0]));
+            }
+            return { success: true };
+          }),
+          all: vi.fn().mockImplementation(async () => {
+            if (sql.includes('FROM clusters c')) {
+              return {
+                results: [
+                  {
+                    id: 'cluster_dup_candidate',
+                    label: 'Y Combinator · paul graham, bhavyam arora',
+                    score: 74,
+                    status: 'READY',
+                    topic_tags: '["AI"]',
+                    article_count: 1,
+                    source_count: 1,
+                  },
+                ],
+              };
+            }
+            if (sql.includes('FROM cluster_articles ca')) {
+              return {
+                results: [
+                  {
+                    source: 'x',
+                    url: 'https://x.com/AroraBhavyam/status/2114733287629619337',
+                    title: 'YC W27 applications close in a week',
+                    author: '@AroraBhavyam',
+                    summary: 'YC deadline.',
+                    evidence: JSON.stringify(['2% acceptance rate', '4% unicorn rate']),
+                    counter: null,
+                  },
+                ],
+              };
+            }
+            return { results: [] };
+          }),
+          first: vi.fn().mockImplementation(async () => {
+            if (sql.includes('SELECT count(*) as count FROM notified_clusters')) {
+              return { count: 0 };
+            }
+            if (sql.includes('SELECT 1 FROM cluster_articles ca')) {
+              // Simulating that this article was already in a previously notified cluster
+              return { 1: 1 };
+            }
+            return null;
+          }),
+        })),
+      })),
+    } as unknown as D1Database;
+
+    const webhookUrl = 'https://discord.com/api/webhooks/123/token';
+    const result = await notifyPromotedClusters(mockDb, webhookUrl);
+
+    // Verified: Sent count is 0, zero fetch calls dispatched!
+    expect(result.sentCount).toBe(0);
+    expect(result.reason).toContain('All candidate clusters were already notified or duplicate stories');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // The duplicate candidate cluster is recorded as notified to prevent re-querying
+    expect(notifiedSet.has('cluster_dup_candidate')).toBe(true);
   });
 });

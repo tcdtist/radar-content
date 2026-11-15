@@ -41,7 +41,9 @@ export async function queryCardById(
               e.summary, e.evidence, e.counter, e.context, e.verification_questions
        FROM cluster_articles ca
        JOIN articles a ON ca.article_id = a.id
-       LEFT JOIN extractions e ON a.id = e.article_id
+       LEFT JOIN extractions e ON e.id = (
+         SELECT e2.id FROM extractions e2 WHERE e2.article_id = a.id ORDER BY e2.extracted_at DESC LIMIT 1
+       )
        WHERE ca.cluster_id = ?
        ORDER BY a.published_at DESC, a.crawled_at DESC
        LIMIT 10`
@@ -63,13 +65,22 @@ export async function queryCardById(
     }>();
 
   const articles = articleQuery.results ?? [];
+  const uniqueArticlesMap = new Map<string, typeof articles[0]>();
+  for (const art of articles) {
+    const key = art.url || art.id;
+    if (!uniqueArticlesMap.has(key)) {
+      uniqueArticlesMap.set(key, art);
+    }
+  }
+  const uniqueArticles = Array.from(uniqueArticlesMap.values());
+
   const evidenceList: string[] = [];
   const counterList: string[] = [];
   const contextList: string[] = [];
   const questionsList: string[] = [];
   let bestSummary = '';
 
-  for (const art of articles) {
+  for (const art of uniqueArticles) {
     if (!bestSummary && art.summary && art.summary.trim().length > 0) {
       bestSummary = art.summary.trim();
     }
@@ -107,8 +118,8 @@ export async function queryCardById(
     topic_tags: tags,
     score: clusterRow.score,
     status: (clusterRow.status as CardStatus) || 'LEAD',
-    article_count: clusterRow.article_count,
-    source_count: clusterRow.source_count,
+    article_count: clusterRow.article_count || uniqueArticles.length,
+    source_count: clusterRow.source_count > 0 ? clusterRow.source_count : new Set(uniqueArticles.map((a) => a.source)).size,
     created_at: clusterRow.created_at,
     updated_at: clusterRow.updated_at,
     summary: bestSummary || clusterRow.label || 'Technical Intelligence Signal',
@@ -117,7 +128,7 @@ export async function queryCardById(
     context: Array.from(new Set(contextList)),
     verification_questions: Array.from(new Set(questionsList)),
     entities: [],
-    sources: articles.map((a) => ({
+    sources: uniqueArticles.map((a) => ({
       title: a.title,
       url: a.url,
       source: (a.source as SourceType) || 'rss',
@@ -125,8 +136,8 @@ export async function queryCardById(
       published_at: a.published_at,
       crawled_at: a.crawled_at,
     })),
-    freshness: computeCardFreshness(clusterRow.created_at, articles),
-    highest_tier: computeCardHighestTier(articles.map((a) => ({
+    freshness: computeCardFreshness(clusterRow.created_at, uniqueArticles),
+    highest_tier: computeCardHighestTier(uniqueArticles.map((a) => ({
       source: (a.source as SourceType) || 'rss',
       url: a.url,
     }))),

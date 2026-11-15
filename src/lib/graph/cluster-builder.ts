@@ -1,9 +1,14 @@
 import { linkClusterArticle, upsertCluster } from '../db/cluster-queries';
-import { migrateTranslations } from '../db/translation-queries';
-import { CardStatus, makeArticleId, makeClusterId, SourceType } from '../db/types';
+import { CardStatus, makeArticleId, makeClusterId } from '../db/types';
 import { ScoringEngine } from '../scoring/scoring-engine';
 import { getAuthorityWeight } from '../scoring/source-tiers';
-import { deriveClusterLabel, deriveStableClusterId, determineClusterTags } from './cluster-builder-utils';
+import {
+  consolidateDuplicateClusters,
+  deriveClusterLabel,
+  deriveStableClusterId,
+  determineClusterTags,
+  queryCommunityArticles,
+} from './cluster-builder-utils';
 import { fetchGraph } from './graph-queries';
 import { LeidenAlgorithm } from './leiden-algorithm';
 
@@ -74,52 +79,21 @@ export class ClusterBuilder {
       // Query articles linked to top entities in this community (max 25 variables)
       // Hard 7-day rolling horizon: active radar waves strictly cluster fresh articles
       const activeCutoff = now - SEAL_WINDOW_SECONDS;
-      const placeholders = queryEntityIds.map(() => '?').join(',');
-      const articleRows = await db.prepare(`
-        SELECT DISTINCT a.id, a.source, a.url, a.published_at, a.crawled_at, e.evidence
-        FROM article_entities ae
-        JOIN articles a ON ae.article_id = a.id
-        LEFT JOIN extractions e ON a.id = e.article_id
-        WHERE ae.entity_id IN (${placeholders})
-          AND (a.crawled_at >= ? OR a.published_at >= ?)
-        ORDER BY a.crawled_at DESC LIMIT 15
-      `).bind(...queryEntityIds, activeCutoff, activeCutoff).all<{
-        id: string;
-        source: SourceType;
-        url: string;
-        published_at: number | null;
-        crawled_at: number;
-        evidence: string | null;
-      }>();
+      const rawArticles = await queryCommunityArticles(db, queryEntityIds, topEntities, activeCutoff);
 
-      let articles = articleRows.results ?? [];
-
-      if (articles.length === 0 && topEntities.length > 0) {
-        const likes = topEntities.map(() => 'a.title LIKE ?').join(' OR ');
-        const params = topEntities.map((name) => `%${name}%`);
-        const fallbackRows = await db.prepare(`
-          SELECT DISTINCT a.id, a.source, a.url, a.published_at, a.crawled_at, e.evidence
-          FROM articles a
-          LEFT JOIN extractions e ON a.id = e.article_id
-          WHERE (${likes})
-            AND (a.crawled_at >= ? OR a.published_at >= ?)
-          ORDER BY a.crawled_at DESC LIMIT 10
-        `).bind(...params, activeCutoff, activeCutoff).all<{
-          id: string;
-          source: SourceType;
-          url: string;
-          published_at: number | null;
-          crawled_at: number;
-          evidence: string | null;
-        }>();
-        articles = fallbackRows.results ?? [];
-      }
-
-      const freshArticles = articles.filter(
+      const freshArticles = rawArticles.filter(
         (a) => (now - (a.published_at ?? a.crawled_at)) <= SEAL_WINDOW_SECONDS || (now - a.crawled_at) <= SEAL_WINDOW_SECONDS
       );
-      if (freshArticles.length === 0) continue;
-      articles = freshArticles;
+
+      // Deduplicate articles by id to prevent inflated article_count
+      const uniqueArticleMap = new Map<string, typeof freshArticles[0]>();
+      for (const a of freshArticles) {
+        if (!uniqueArticleMap.has(a.id)) {
+          uniqueArticleMap.set(a.id, a);
+        }
+      }
+      const articles = Array.from(uniqueArticleMap.values());
+      if (articles.length === 0) continue;
 
       const earliestArticleTime = Math.min(...articles.map((a) => a.published_at ?? a.crawled_at ?? now));
       let clusterId = baseClusterId;
@@ -132,17 +106,9 @@ export class ClusterBuilder {
         clusterCreatedAt = waveRow?.created_at ?? earliestArticleTime;
       }
 
-      // Check legacy non-deterministic cluster for translation migration
-      const legacyRow = await db.prepare(
-        `SELECT id FROM clusters WHERE label = ? AND id != ? AND id LIKE 'cluster_comm_%' AND status != 'SEALED' LIMIT 1`
-      ).bind(label, clusterId).first<{ id: string }>();
-
-      if (legacyRow) {
-        const migrated = await migrateTranslations(db, makeClusterId(legacyRow.id), clusterId);
-        if (migrated) translationsMigrated++;
-        await db.prepare('DELETE FROM cluster_articles WHERE cluster_id = ?').bind(legacyRow.id).run();
-        await db.prepare('DELETE FROM clusters WHERE id = ?').bind(legacyRow.id).run();
-      }
+      // Consolidate any active unsealed clusters with the same label to eliminate duplicates
+      const migrated = await consolidateDuplicateClusters(db, label, clusterId);
+      translationsMigrated += migrated;
 
       const sources = articles.map((a) => a.source);
       const publishedTimes = articles.map((a) => a.published_at).filter((t): t is number => t !== null);

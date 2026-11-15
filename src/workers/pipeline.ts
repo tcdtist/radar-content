@@ -96,6 +96,16 @@ export async function processArticlePipeline(
   const articleId = makeArticleId(articleIdStr);
 
   try {
+    // 0. Idempotency guard: skip LLM extraction if article was already processed
+    const articleRow = await env.DB.prepare(
+      'SELECT processed FROM articles WHERE id = ?'
+    ).bind(articleId).first<{ processed: number }>();
+
+    if (articleRow?.processed === 1) {
+      console.log(`[Pipeline] Article ${articleIdStr} already processed, skipping duplicate extraction.`);
+      return true;
+    }
+
     // 1. LLM Structured Extraction
     const extraction = await extractor.extract(title, body, source);
 

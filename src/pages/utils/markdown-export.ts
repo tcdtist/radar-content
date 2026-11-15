@@ -4,6 +4,7 @@ export interface ExportContent {
   summary: string;
   evidence: string[];
   counter: string[];
+  context: string[];
   verification_questions: string[];
 }
 
@@ -17,6 +18,7 @@ export function generateCardMarkdown(
   const summary = displayContent?.summary || card.summary;
   const evidence = displayContent?.evidence?.length ? displayContent.evidence : card.evidence;
   const counter = displayContent?.counter?.length ? displayContent.counter : card.counter;
+  const context = displayContent?.context?.length ? displayContent.context : card.context;
   const questions = displayContent?.verification_questions?.length
     ? displayContent.verification_questions
     : card.verification_questions;
@@ -33,9 +35,13 @@ ${evidence.map((e) => `- ${e}`).join('\n') || '- None recorded'}
 ### Counterarguments
 ${counter.map((c) => `- ${c}`).join('\n') || '- None recorded'}
 
+### Context
+${context.map((cx) => `- ${cx}`).join('\n') || '- None recorded'}
+
 ### Verification Checklist
 ${questions.map((q) => `- [ ] ${q}`).join('\n') || '- None'}
 
 ### Sources
 ${card.sources.map((s) => `- [${s.source.toUpperCase()}] ${s.title}: ${s.url}`).join('\n')}`;
 }
+

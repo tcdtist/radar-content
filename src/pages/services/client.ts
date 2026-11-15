@@ -53,6 +53,20 @@ export async function fetchStats(): Promise<DashboardStats> {
   }
 }
 
+function deduplicateCards(cards: ScoredIntelligenceCard[]): ScoredIntelligenceCard[] {
+  const seenIds = new Set<string>();
+  const seenLabels = new Set<string>();
+  const result: ScoredIntelligenceCard[] = [];
+  for (const c of cards) {
+    const key = c.label.toLowerCase().split(/[·,]/).map((s) => s.trim()).filter(Boolean).sort().join('|');
+    if (seenIds.has(c.id) || (key && seenLabels.has(key))) continue;
+    seenIds.add(c.id);
+    if (key) seenLabels.add(key);
+    result.push(c);
+  }
+  return result;
+}
+
 export async function fetchCards(filters: {
   topic?: string;
   status?: string;
@@ -74,7 +88,7 @@ export async function fetchCards(filters: {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as { success: boolean; cards: ScoredIntelligenceCard[] };
-    return data.success && Array.isArray(data.cards) ? data.cards : [];
+    return data.success && Array.isArray(data.cards) ? deduplicateCards(data.cards) : [];
   } catch (err) {
     console.warn('[Radar Client] Failed to fetch live cards, using mock fallback:', err);
     let fallback = [...MOCK_INTELLIGENCE_CARDS];
@@ -87,7 +101,7 @@ export async function fetchCards(filters: {
       const allowed = filters.status.split(',').map((s) => s.trim().toUpperCase());
       fallback = fallback.filter((c) => allowed.includes(c.status));
     }
-    return fallback;
+    return deduplicateCards(fallback);
   }
 }
 

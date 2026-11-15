@@ -1,13 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CardStatus, ScoredIntelligenceCard } from '../../lib/db/types';
 import { generateCardMarkdown } from '../utils/markdown-export';
 import { useCardTranslation } from '../hooks/useCardTranslation';
 import { getSavedDetailScroll, saveDetailScroll } from '../hooks/useMobileScrollPersistence';
-import { BaseButton } from './BaseButton';
 import { DetailCardHeader } from './DetailCardHeader';
 import { DetailDrawerFooter } from './DetailDrawerFooter';
 import { DetailDrawerHeader } from './DetailDrawerHeader';
 import { DetailTabsContent, TabKey } from './DetailTabsContent';
+import { DetailTabsNav, TabItem } from './DetailTabsNav';
 
 interface DetailPanelProps {
   card: ScoredIntelligenceCard | null;
@@ -27,7 +27,8 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
   onTabChange,
 }) => {
   const [internalTab, setInternalTab] = useState<TabKey>('summary');
-  const activeTab = controlledTab || internalTab;
+  const rawTab = controlledTab || internalTab;
+  const activeTab: TabKey = rawTab === 'sources' ? 'threads' : rawTab;
   const [copied, setCopied] = useState(false);
   const drawerBodyRef = useRef<HTMLDivElement>(null);
 
@@ -79,24 +80,43 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
     };
   }, [card?.id]);
 
-  if (!card) return null;
+  const uniqueSources = useMemo(() => {
+    if (!card?.sources) return [];
+    const seen = new Set<string>();
+    return card.sources.filter((s) => {
+      const key = s.url || s.title || `${s.source}_${s.author}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [card?.sources]);
 
-  const padItems = (translated?: string[], original: string[] = []): string[] => {
-    if (!translated || translated.length === 0) return original;
-    if (translated.length >= original.length) return translated;
-    return [...translated, ...original.slice(translated.length)];
-  };
+  const sanitizedCard = useMemo(() => {
+    if (!card) return null;
+    return {
+      ...card,
+      sources: uniqueSources,
+    };
+  }, [card, uniqueSources]);
 
-  const displaySummary = activeTranslation?.summary || card.summary;
-  const displayEvidence = padItems(activeTranslation?.evidence, card.evidence);
-  const displayCounter = padItems(activeTranslation?.counter, card.counter);
-  const displayVerify = padItems(activeTranslation?.verification_questions, card.verification_questions);
+  if (!card || !sanitizedCard) return null;
+
+  const padItems = (t?: string[], orig: string[] = []): string[] =>
+    !t || !t.length ? orig : t.length >= orig.length ? t : [...t, ...orig.slice(t.length)];
+
+  const displaySummary = activeTranslation?.summary || sanitizedCard.summary;
+  const displayEvidence = padItems(activeTranslation?.evidence, sanitizedCard.evidence);
+  const displayCounter = padItems(activeTranslation?.counter, sanitizedCard.counter);
+  const displayContext = padItems(activeTranslation?.context, sanitizedCard.context);
+  const displayVerify = padItems(activeTranslation?.verification_questions, sanitizedCard.verification_questions);
+
 
   const copyMarkdown = () => {
-    const md = generateCardMarkdown(card, {
+    const md = generateCardMarkdown(sanitizedCard, {
       summary: displaySummary,
       evidence: displayEvidence,
       counter: displayCounter,
+      context: displayContext,
       verification_questions: displayVerify,
     });
     navigator.clipboard.writeText(md);
@@ -112,20 +132,20 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
     }
   };
 
-  const tabs: { id: TabKey; label: string }[] = [
+  const tabs: TabItem[] = [
     { id: 'summary', label: 'Summary' },
     { id: 'evidence', label: `Evidence (${displayEvidence.length})` },
     { id: 'counter', label: `Counter (${displayCounter.length})` },
-    { id: 'context', label: 'Context' },
+    { id: 'context', label: `Context (${displayContext.length})` },
     { id: 'verify', label: `Verify (${displayVerify.length})` },
-    { id: 'sources', label: `Sources (${card.sources.length})` },
+    { id: 'threads', label: `Threads (${uniqueSources.length})` },
   ];
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
         <DetailDrawerHeader
-          card={card}
+          card={sanitizedCard}
           isAdmin={isAdmin}
           isTranslating={isTranslating}
           currentLang={currentLang}
@@ -134,39 +154,27 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
         />
 
         <div className="drawer-body" ref={drawerBodyRef}>
-          <DetailCardHeader card={card} />
+          <DetailCardHeader card={sanitizedCard} />
 
-          <div className="drawer-tabs-nav">
-            {tabs.map((tab) => (
-              <BaseButton
-                key={tab.id}
-                variant={activeTab === tab.id ? 'coral' : 'ghost'}
-                size="sm"
-                onClick={() => handleSelectTab(tab.id)}
-              >
-                {tab.label}
-              </BaseButton>
-            ))}
-          </div>
+          <DetailTabsNav
+            tabs={tabs}
+            activeTab={activeTab}
+            onSelectTab={handleSelectTab}
+          />
 
-          {isTranslating ? (
+          {isTranslating && activeTab !== 'threads' ? (
             <div className="card" style={{ padding: '2rem 1rem', textAlign: 'center' }}>
               <p className="font-mono text-coral" style={{ fontSize: '0.85rem' }}>
                 &gt; Đang dịch phân tích kỹ thuật sang tiếng Việt với Gemini AI...
               </p>
             </div>
-          ) : error && currentLang === 'vi' ? (
-            <div
-              className="card"
-              style={{ padding: '1.5rem', textAlign: 'center', borderColor: 'var(--color-danger)' }}
-            >
-              <p className="font-mono" style={{ fontSize: '0.85rem', color: 'var(--color-danger)' }}>
-                {error}
-              </p>
+          ) : error && currentLang === 'vi' && activeTab !== 'threads' ? (
+            <div className="card" style={{ padding: '1.5rem', textAlign: 'center', borderColor: 'var(--color-danger)' }}>
+              <p className="font-mono" style={{ fontSize: '0.85rem', color: 'var(--color-danger)' }}>{error}</p>
             </div>
           ) : (
             <DetailTabsContent
-              card={card}
+              card={sanitizedCard}
               activeTab={activeTab}
               translation={activeTranslation}
             />
@@ -183,3 +191,4 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
     </div>
   );
 };
+

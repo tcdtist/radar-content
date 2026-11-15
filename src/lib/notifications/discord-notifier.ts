@@ -26,33 +26,18 @@ export interface NotifyClusterOptions {
   translateFn?: (card: CardToTranslate) => Promise<TranslatedCardContent>;
 }
 
-export async function ensureNotifiedClustersTable(db: D1Database): Promise<void> {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS notified_clusters (
-         cluster_id TEXT PRIMARY KEY,
-         notified_at INTEGER NOT NULL DEFAULT (unixepoch())
-       )`
-    )
-    .run();
-}
+export {
+  ensureNotifiedClustersTable,
+  isClusterNotified,
+  isClusterStoryAlreadyNotified,
+  markClusterNotified,
+} from './discord-story-dedup';
 
-export async function isClusterNotified(db: D1Database, clusterId: string): Promise<boolean> {
-  await ensureNotifiedClustersTable(db);
-  const row = await db
-    .prepare('SELECT 1 FROM notified_clusters WHERE cluster_id = ?')
-    .bind(clusterId)
-    .first();
-  return Boolean(row);
-}
-
-export async function markClusterNotified(db: D1Database, clusterId: string): Promise<void> {
-  await ensureNotifiedClustersTable(db);
-  await db
-    .prepare('INSERT OR IGNORE INTO notified_clusters (cluster_id) VALUES (?)')
-    .bind(clusterId)
-    .run();
-}
+import {
+  ensureNotifiedClustersTable,
+  isClusterStoryAlreadyNotified,
+  markClusterNotified,
+} from './discord-story-dedup';
 
 export async function notifyPromotedClusters(
   db: D1Database,
@@ -119,7 +104,9 @@ export async function notifyPromotedClusters(
         `SELECT a.source, a.url, a.title, a.author, e.summary, e.evidence, e.counter
          FROM cluster_articles ca
          JOIN articles a ON ca.article_id = a.id
-         LEFT JOIN extractions e ON a.id = e.article_id
+         LEFT JOIN extractions e ON e.id = (
+           SELECT e2.id FROM extractions e2 WHERE e2.article_id = a.id ORDER BY e2.extracted_at DESC LIMIT 1
+         )
          WHERE ca.cluster_id = ?
          LIMIT 5`
       )
@@ -131,6 +118,12 @@ export async function notifyPromotedClusters(
     if (!options.force) {
       const hasAuthority = articles.some((a) => getAuthorityWeight(a.source, a.url) >= 0.75);
       if (!hasAuthority) continue;
+
+      const isAlreadyCovered = await isClusterStoryAlreadyNotified(db, cluster, articles);
+      if (isAlreadyCovered) {
+        await markClusterNotified(db, cluster.id);
+        continue;
+      }
     }
 
     try {
@@ -147,6 +140,10 @@ export async function notifyPromotedClusters(
     } catch (err) {
       console.error(`[DiscordNotifier] Failed to notify cluster ${cluster.id}:`, err);
     }
+  }
+
+  if (sentCount === 0 && candidates.length > 0) {
+    return { sentCount: 0, reason: 'All candidate clusters were already notified or duplicate stories' };
   }
 
   return { sentCount, notifiedClusterId: lastNotifiedId };

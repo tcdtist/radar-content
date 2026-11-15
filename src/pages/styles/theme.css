@@ -80,12 +80,13 @@ main {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-auto-rows: auto;
   gap: 1.25rem;
 }
 
 @media (max-width: 480px) {
   .card-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
   }
 }
@@ -163,6 +164,8 @@ main {
   border-radius: var(--radius-sm);
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .badge-ready { background: rgba(94, 184, 122, 0.12); color: var(--color-success); border: 1px solid rgba(94, 184, 122, 0.35); }
 .badge-lead { background: rgba(212, 162, 127, 0.12); color: var(--accent-bronze); border: 1px solid rgba(212, 162, 127, 0.35); }

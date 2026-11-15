@@ -36,7 +36,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: '1rem',
           flexWrap: 'wrap',
           marginBottom: '0.85rem',
@@ -122,7 +122,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       </div>
 
       {/* Topic Filter Pills & Date Window */}
-      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <span
             className="font-mono"
