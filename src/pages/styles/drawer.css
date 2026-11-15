@@ -120,7 +120,21 @@
     padding-right: 1rem;
     padding-top: 0.65rem;
     padding-bottom: 0.55rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-coral) transparent;
   }
+  .drawer-tabs-nav::-webkit-scrollbar {
+    display: block;
+    height: 3px;
+  }
+  .drawer-tabs-nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .drawer-tabs-nav::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+  }
+
   .drawer-footer {
     flex-direction: column;
     align-items: stretch;

@@ -9,6 +9,11 @@ export async function insertExtraction(
   articleId: ArticleId,
   extraction: StructuredExtraction
 ): Promise<ExtractionId | null> {
+  const existing = await getExtractionForArticle(db, articleId);
+  if (existing) {
+    return existing.id;
+  }
+
   const id = makeExtractionId(`ext_${crypto.randomUUID()}`);
   const now = Math.floor(Date.now() / 1000);
 

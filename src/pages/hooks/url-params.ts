@@ -1,7 +1,7 @@
 import { TabKey } from '../components/DetailTabsContent';
 import { STATUS_OPTIONS, TOPICS } from '../components/filter-bar-config';
 
-export const VALID_TABS: readonly TabKey[] = ['summary', 'evidence', 'counter', 'context', 'verify', 'sources'];
+export const VALID_TABS: readonly TabKey[] = ['summary', 'evidence', 'counter', 'context', 'verify', 'threads', 'sources'];
 export const VALID_PAGE_SIZES = [6, 12, 24] as const;
 export type PageSize = (typeof VALID_PAGE_SIZES)[number];
 

@@ -106,14 +106,6 @@ export async function handleIngestPosts(
       result.insertedUrls.push(post.url);
       result.insertedCount++;
 
-      if (env.ARTICLE_QUEUE) {
-        try {
-          await env.ARTICLE_QUEUE.send({ articleId });
-        } catch (queueErr) {
-          console.error(`Failed to enqueue article ${articleId}:`, queueErr);
-        }
-      }
-
       if (payload.processNow) {
         try {
           const ok = await processArticlePipeline(
@@ -126,6 +118,12 @@ export async function handleIngestPosts(
           if (ok) result.processedCount++;
         } catch (procErr) {
           result.errors.push(`Processing failed for ${articleId}: ${String(procErr)}`);
+        }
+      } else if (env.ARTICLE_QUEUE) {
+        try {
+          await env.ARTICLE_QUEUE.send({ articleId });
+        } catch (queueErr) {
+          console.error(`Failed to enqueue article ${articleId}:`, queueErr);
         }
       }
     } catch (err) {

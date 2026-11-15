@@ -4,7 +4,7 @@ import { formatDateTime, formatRelativeTime } from '../utils/date-format';
 import { getTierBadge } from '../utils/tier-badge';
 import { ClockIcon, ExternalLinkIcon } from './Icons';
 
-export type TabKey = 'summary' | 'evidence' | 'counter' | 'context' | 'verify' | 'sources';
+export type TabKey = 'summary' | 'evidence' | 'counter' | 'context' | 'verify' | 'threads' | 'sources';
 
 interface DetailTabsContentProps {
   card: ScoredIntelligenceCard;
@@ -97,13 +97,21 @@ export const DetailTabsContent: React.FC<DetailTabsContentProps> = ({ card, acti
     );
   }
 
-  if (activeTab === 'sources') {
+  if (activeTab === 'threads' || activeTab === 'sources') {
+    const seen = new Set<string>();
+    const uniqueSources = card.sources.filter((s) => {
+      const key = s.url || s.title || `${s.source}_${s.author}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {card.sources.map((s, idx) => (
+        {uniqueSources.map((s, idx) => (
           <div key={idx} className="card" style={{ padding: '0.95rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
                 <span className="badge font-mono" style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: 'var(--bg-tertiary)' }}>
                   {s.source.toUpperCase()}
                 </span>
@@ -117,7 +125,7 @@ export const DetailTabsContent: React.FC<DetailTabsContentProps> = ({ card, acti
                 )}
               </div>
               {s.published_at && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'flex-start', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                   <ClockIcon size={12} color="var(--text-muted)" />
                   <span className="font-mono">{formatRelativeTime(s.published_at)}</span>
                 </div>

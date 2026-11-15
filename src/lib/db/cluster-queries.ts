@@ -1,5 +1,6 @@
 import { computeCardFreshness, computeCardHighestTier } from '../scoring/card-metadata';
 import { ScoringEngine } from '../scoring/scoring-engine';
+import { normalizeClusterLabelKey } from '../graph/cluster-builder-utils';
 import {
   ClusterRecord,
   makeClusterId,
@@ -7,11 +8,7 @@ import {
   SourceType,
 } from './types';
 
-export {
-  linkClusterArticle,
-  updateCardStatus,
-  upsertCluster,
-} from './cluster-mutations';
+export { linkClusterArticle, updateCardStatus, upsertCluster } from './cluster-mutations';
 
 export interface CardQueryFilters {
   topic?: string;
@@ -56,9 +53,15 @@ export async function queryCards(
   const clusters = clusterRows.results ?? [];
 
   const cards: ScoredIntelligenceCard[] = [];
+  const seenLabelKeys = new Set<string>();
+  const seenClusterIds = new Set<string>();
 
   for (const c of clusters) {
     const clusterId = makeClusterId(c.id as unknown as string);
+    if (seenClusterIds.has(clusterId)) continue;
+    const labelKey = c.label ? normalizeClusterLabelKey(c.label) : '';
+    if (labelKey && seenLabelKeys.has(labelKey)) continue;
+
     const tags: string[] = JSON.parse(c.topic_tags || '["AI"]');
 
     if (filters.topic && filters.topic !== 'all' && !tags.some((t) => t.toLowerCase() === filters.topic?.toLowerCase())) {
@@ -71,7 +74,9 @@ export async function queryCards(
              e.summary, e.evidence, e.counter, e.context, e.verification_questions
       FROM cluster_articles ca
       JOIN articles a ON ca.article_id = a.id
-      LEFT JOIN extractions e ON a.id = e.article_id
+      LEFT JOIN extractions e ON e.id = (
+        SELECT e2.id FROM extractions e2 WHERE e2.article_id = a.id ORDER BY e2.extracted_at DESC LIMIT 1
+      )
       WHERE ca.cluster_id = ?
       ORDER BY a.published_at DESC, a.crawled_at DESC
       LIMIT 10
@@ -91,47 +96,41 @@ export async function queryCards(
     }>();
 
     const articles = articleQuery.results ?? [];
+    const uniqueArticlesMap = new Map<string, typeof articles[0]>();
+    for (const art of articles) {
+      const key = art.url || art.id;
+      if (!uniqueArticlesMap.has(key)) {
+        uniqueArticlesMap.set(key, art);
+      }
+    }
+    const uniqueArticles = Array.from(uniqueArticlesMap.values());
+
     const evidenceList: string[] = [];
     const counterList: string[] = [];
     const contextList: string[] = [];
     const questionsList: string[] = [];
     let bestSummary = '';
 
-    for (const art of articles) {
+    const parseJsonArray = (val: string | null): string[] => {
+      if (!val) return [];
+      try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch { return []; }
+    };
+
+    for (const art of uniqueArticles) {
       if (!bestSummary && art.summary && art.summary.trim().length > 0) {
         bestSummary = art.summary.trim();
       }
-      if (art.evidence) {
-        try {
-          const parsed = JSON.parse(art.evidence);
-          if (Array.isArray(parsed)) evidenceList.push(...parsed);
-        } catch {}
-      }
-      if (art.counter) {
-        try {
-          const parsed = JSON.parse(art.counter);
-          if (Array.isArray(parsed)) counterList.push(...parsed);
-        } catch {}
-      }
-      if (art.context) {
-        try {
-          const parsed = JSON.parse(art.context);
-          if (Array.isArray(parsed)) contextList.push(...parsed);
-        } catch {}
-      }
-      if (art.verification_questions) {
-        try {
-          const parsed = JSON.parse(art.verification_questions);
-          if (Array.isArray(parsed)) questionsList.push(...parsed);
-        } catch {}
-      }
+      evidenceList.push(...parseJsonArray(art.evidence));
+      counterList.push(...parseJsonArray(art.counter));
+      contextList.push(...parseJsonArray(art.context));
+      questionsList.push(...parseJsonArray(art.verification_questions));
     }
 
     if (!bestSummary) {
       bestSummary = c.label || 'Technical Intelligence Signal';
     }
 
-    const articleTimes = articles.map((a) => a.published_at ?? a.crawled_at ?? 0).filter((t) => t > 0);
+    const articleTimes = uniqueArticles.map((a) => a.published_at ?? a.crawled_at ?? 0).filter((t) => t > 0);
     const latestActivityAt = articleTimes.length > 0 ? Math.max(...articleTimes) : c.created_at;
     const score = filters.sort === 'newest'
       ? c.score
@@ -141,14 +140,17 @@ export async function queryCards(
       continue;
     }
 
+    seenClusterIds.add(clusterId);
+    if (labelKey) seenLabelKeys.add(labelKey);
+
     cards.push({
       id: clusterId,
       label: c.label || 'Topic Discussion',
       topic_tags: tags,
       score,
       status: c.status,
-      article_count: c.article_count,
-      source_count: c.source_count,
+      article_count: c.article_count || uniqueArticles.length,
+      source_count: c.source_count > 0 ? c.source_count : new Set(uniqueArticles.map((a) => a.source)).size,
       created_at: c.created_at,
       updated_at: c.updated_at,
       summary: bestSummary,
@@ -157,7 +159,7 @@ export async function queryCards(
       context: Array.from(new Set(contextList)),
       verification_questions: Array.from(new Set(questionsList)),
       entities: [],
-      sources: articles.map((a) => ({
+      sources: uniqueArticles.map((a) => ({
         title: a.title,
         url: a.url,
         source: a.source,
@@ -165,8 +167,8 @@ export async function queryCards(
         published_at: a.published_at,
         crawled_at: a.crawled_at,
       })),
-      freshness: computeCardFreshness(c.created_at, articles, filters.nowSeconds),
-      highest_tier: computeCardHighestTier(articles),
+      freshness: computeCardFreshness(c.created_at, uniqueArticles, filters.nowSeconds),
+      highest_tier: computeCardHighestTier(uniqueArticles),
     });
   }
 
@@ -177,21 +179,4 @@ export async function queryCards(
   return cards;
 }
 
-export async function getDashboardStats(db: D1Database): Promise<{
-  totalArticles: number;
-  totalClusters: number;
-  readyCount: number;
-  writtenCount: number;
-}> {
-  const artCount = await db.prepare('SELECT count(*) as count FROM articles').first<{ count: number }>();
-  const cluCount = await db.prepare('SELECT count(*) as count FROM clusters').first<{ count: number }>();
-  const ready = await db.prepare("SELECT count(*) as count FROM clusters WHERE status = 'READY'").first<{ count: number }>();
-  const written = await db.prepare("SELECT count(*) as count FROM clusters WHERE status = 'WRITTEN'").first<{ count: number }>();
-
-  return {
-    totalArticles: artCount?.count ?? 0,
-    totalClusters: cluCount?.count ?? 0,
-    readyCount: ready?.count ?? 0,
-    writtenCount: written?.count ?? 0,
-  };
-}
+export { getDashboardStats } from './dashboard-stats-queries';

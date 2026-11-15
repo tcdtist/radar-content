@@ -8,11 +8,22 @@ export { MOCK_FRONTEND_CARDS } from './mock-cards-frontend';
 export { MOCK_SYSTEM_CARDS } from './mock-cards-system';
 
 /**
- * Combined 12 Curated Mock Intelligence Cards for Guest Preview.
- * Strictly sorted by score descending (98 -> 92).
+ * Combined Curated Mock Intelligence Cards for Guest Preview.
+ * Strictly deduplicated by card ID and sorted by score descending.
  */
-export const MOCK_INTELLIGENCE_CARDS: ScoredIntelligenceCard[] = [
+const rawMockCards: ScoredIntelligenceCard[] = [
   ...MOCK_AI_CARDS,
   ...MOCK_SYSTEM_CARDS,
   ...MOCK_FRONTEND_CARDS,
-].sort((a, b) => b.score - a.score);
+];
+
+const uniqueCardsMap = new Map<string, ScoredIntelligenceCard>();
+for (const card of rawMockCards) {
+  if (!uniqueCardsMap.has(card.id)) {
+    uniqueCardsMap.set(card.id, card);
+  }
+}
+
+export const MOCK_INTELLIGENCE_CARDS: ScoredIntelligenceCard[] = Array.from(
+  uniqueCardsMap.values()
+).sort((a, b) => b.score - a.score);
